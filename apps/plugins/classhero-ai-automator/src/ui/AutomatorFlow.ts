@@ -120,6 +120,44 @@ export class AutomatorFlow {
             return;
         }
 
+        /*
+         * Fail before asking for mode/level/quantity and, more importantly,
+         * before any executor can create a ClassHero game/session/attempt.
+         */
+        const preflight =
+            await this.engine.preflight(
+                target.id,
+            );
+
+        if (!preflight.ready) {
+            this.context.logger.warn(
+                preflight.message,
+                {
+                    targetId:
+                        preflight.targetId,
+                    capability:
+                        preflight.capability,
+                },
+            );
+            return;
+        }
+
+        if (preflight.requiresAI) {
+            this.context.logger.info(
+                `AI Provider disponível para '${target.label}': ${preflight.providerName}.`,
+                {
+                    targetId:
+                        preflight.targetId,
+                    capability:
+                        preflight.capability,
+                    providerId:
+                        preflight.providerId,
+                    providerName:
+                        preflight.providerName,
+                },
+            );
+        }
+
         let options:
             ExecuteAutomationOptions = {};
 

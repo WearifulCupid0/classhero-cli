@@ -35,6 +35,72 @@ export interface ExecuteAutomationOptions {
     readonly interactivePathLevel?: string;
 }
 
+/**
+ * Public result of checking whether an automation can start safely.
+ *
+ * No ClassHero activity/game/session endpoint is called during preflight.
+ */
+export type AutomationPreflightResult =
+    | {
+        readonly ready: true;
+        readonly targetId: AutomationTargetId;
+        readonly requiresAI: false;
+    }
+    | {
+        readonly ready: true;
+        readonly targetId: AutomationTargetId;
+        readonly requiresAI: true;
+        readonly capability: AIProviderCapability;
+        readonly providerId: string;
+        readonly providerName: string;
+    }
+    | {
+        readonly ready: false;
+        readonly targetId: AutomationTargetId;
+        readonly requiresAI: true;
+        readonly capability: AIProviderCapability;
+        readonly message: string;
+    };
+
+type ResolvedAutomationPreflight =
+    | {
+        readonly ready: true;
+        readonly targetId: AutomationTargetId;
+        readonly requiresAI: false;
+    }
+    | {
+        readonly ready: true;
+        readonly targetId: AutomationTargetId;
+        readonly requiresAI: true;
+        readonly capability: AIProviderCapability;
+        readonly provider: AIProvider;
+    }
+    | {
+        readonly ready: false;
+        readonly targetId: AutomationTargetId;
+        readonly requiresAI: true;
+        readonly capability: AIProviderCapability;
+        readonly message: string;
+    };
+
+/**
+ * AI requirements are explicit rather than inferred ad hoc inside executors.
+ *
+ * `interactive-path` is conservatively preflighted as AI-dependent because the
+ * path steps are only known after the attempt is started. This prevents the
+ * CLI from creating a Trilha attempt and discovering later that a quick_quiz
+ * cannot be answered.
+ */
+const AI_CAPABILITY_BY_TARGET: Readonly<
+    Partial<Record<AutomationTargetId, AIProviderCapability>>
+> = {
+    hangman: "hangman",
+    quiz: "quiz",
+    "interactive-path": "interactive-path",
+    code: "code",
+    discursive: "discursive",
+};
+
 export class AutomationEngine {
     private readonly wordSearch: WordSearchExecutor;
     private readonly memory: MemoryExecutor;
@@ -49,10 +115,26 @@ export class AutomationEngine {
         private readonly activityLogger: AutomationActivityLogger,
         private readonly planner = new AutomationPlanner(),
     ) {
-        this.wordSearch = new WordSearchExecutor(api, timingPolicy, activityLogger);
-        this.memory = new MemoryExecutor(api, timingPolicy, activityLogger);
-        this.hangman = new HangmanExecutor(api, timingPolicy, activityLogger);
-        this.quiz = new QuizExecutor(api, timingPolicy, activityLogger);
+        this.wordSearch = new WordSearchExecutor(
+            api,
+            timingPolicy,
+            activityLogger,
+        );
+        this.memory = new MemoryExecutor(
+            api,
+            timingPolicy,
+            activityLogger,
+        );
+        this.hangman = new HangmanExecutor(
+            api,
+            timingPolicy,
+            activityLogger,
+        );
+        this.quiz = new QuizExecutor(
+            api,
+            timingPolicy,
+            activityLogger,
+        );
         this.interactivePath = new InteractivePathExecutor(
             api,
             timingPolicy,
@@ -60,8 +142,12 @@ export class AutomationEngine {
         );
     }
 
-    inspect(context: ActivityContext): AutomationPlan {
-        return this.planner.plan(context);
+    inspect(
+        context: ActivityContext,
+    ): AutomationPlan {
+        return this.planner.plan(
+            context,
+        );
     }
 
     providers(): readonly AIProvider[] {
@@ -76,136 +162,281 @@ export class AutomationEngine {
         return this.activityLogger;
     }
 
+    /**
+     * Checks every dependency required to start an automation.
+     *
+     * This performs no ClassHero activity-side effects. In particular it does
+     * not create a game puzzle, quiz attempt or interactive-path attempt.
+     */
+    async preflight(
+        targetId: AutomationTargetId,
+        preferredProviderId?: string,
+    ): Promise<AutomationPreflightResult> {
+        const result =
+            await this.resolvePreflight(
+                targetId,
+                preferredProviderId,
+            );
+
+        if (!result.ready) {
+            return result;
+        }
+
+        if (!result.requiresAI) {
+            return result;
+        }
+
+        return {
+            ready: true,
+            targetId:
+                result.targetId,
+            requiresAI: true,
+            capability:
+                result.capability,
+            providerId:
+                result.provider.id,
+            providerName:
+                result.provider.name,
+        };
+    }
+
+    /**
+     * Executes one target after an internal mandatory preflight.
+     *
+     * The preflight is repeated here intentionally so direct programmatic
+     * callers cannot bypass the same safety check used by the interactive UI.
+     */
     async execute(
         context: ActivityContext,
         targetId: AutomationTargetId,
         options: ExecuteAutomationOptions = {},
     ): Promise<AutomationExecutionResult> {
+        const preflight =
+            await this.resolvePreflight(
+                targetId,
+                options.providerId,
+            );
+
+        if (!preflight.ready) {
+            return providerBlocked(
+                targetId,
+                preflight.capability,
+                preflight.message,
+            );
+        }
+
         switch (targetId) {
             case "word-search":
-                return this.wordSearch.execute(context, options.mode ?? "desafio");
+                return this.wordSearch.execute(
+                    context,
+                    options.mode ??
+                        "desafio",
+                );
 
             case "memory":
-                return this.memory.execute(context, options.mode ?? "desafio");
+                return this.memory.execute(
+                    context,
+                    options.mode ??
+                        "desafio",
+                );
 
             case "hangman": {
-                const provider = await this.resolveProvider(
-                    "hangman",
-                    options.providerId,
-                );
-                if (!provider) {
-                    return providerBlocked("hangman", "hangman");
-                }
+                const provider =
+                    requireResolvedProvider(
+                        preflight,
+                        targetId,
+                    );
+
                 return this.hangman.execute(
                     context,
-                    options.mode ?? "desafio",
+                    options.mode ??
+                        "desafio",
                     provider,
                 );
             }
 
             case "quiz": {
-                const provider = await this.resolveProvider(
-                    "quiz",
-                    options.providerId,
+                const provider =
+                    requireResolvedProvider(
+                        preflight,
+                        targetId,
+                    );
+
+                const quizOptions:
+                    QuizExecutionOptions = {
+                        ...(options.quizLevel === undefined
+                            ? {}
+                            : {
+                                level:
+                                    options.quizLevel,
+                            }),
+                        ...(options.quizQuantity === undefined
+                            ? {}
+                            : {
+                                quantity:
+                                    options.quizQuantity,
+                            }),
+                        ...(options.themeMissionMaterialId === undefined
+                            ? {}
+                            : {
+                                themeMissionMaterialId:
+                                    options.themeMissionMaterialId,
+                            }),
+                    };
+
+                return this.quiz.execute(
+                    context,
+                    provider,
+                    quizOptions,
                 );
-                if (!provider) {
-                    return providerBlocked("quiz", "quiz");
-                }
-
-                const quizOptions: QuizExecutionOptions = {
-                    ...(options.quizLevel === undefined
-                        ? {}
-                        : { level: options.quizLevel }),
-                    ...(options.quizQuantity === undefined
-                        ? {}
-                        : { quantity: options.quizQuantity }),
-                    ...(options.themeMissionMaterialId === undefined
-                        ? {}
-                        : {
-                            themeMissionMaterialId:
-                                options.themeMissionMaterialId,
-                        }),
-                };
-
-                return this.quiz.execute(context, provider, quizOptions);
             }
 
             case "interactive-path": {
-                /*
-                 * Provider is optional at this point: a Trilha may contain
-                 * only theory_card/checkpoint steps. The executor blocks only
-                 * if it actually encounters a quick_quiz without a provider.
-                 */
-                const provider = await this.resolveProvider(
-                    "interactive-path",
-                    options.providerId,
-                );
+                const provider =
+                    requireResolvedProvider(
+                        preflight,
+                        targetId,
+                    );
 
                 return this.interactivePath.execute(
                     context,
                     {
-                        level: options.interactivePathLevel ?? "basic",
+                        level:
+                            options.interactivePathLevel ??
+                            "basic",
                     },
                     provider,
                 );
             }
 
             case "code":
-                return this.aiBlocked(
-                    targetId,
-                    "code",
-                    options.providerId,
-                );
+            case "discursive": {
+                const provider =
+                    requireResolvedProvider(
+                        preflight,
+                        targetId,
+                    );
 
-            case "discursive":
-                return this.aiBlocked(
+                return {
+                    status:
+                        "unsupported",
                     targetId,
-                    "discursive",
-                    options.providerId,
-                );
+                    strategy:
+                        "ai",
+                    message:
+                        `O provider '${provider.name}' está disponível, mas o executor específico de '${targetId}' ainda não foi implementado.`,
+                    details: {
+                        providerId:
+                            provider.id,
+                        providerName:
+                            provider.name,
+                    },
+                };
+            }
         }
     }
 
-    private async aiBlocked(
+    private async resolvePreflight(
         targetId: AutomationTargetId,
-        capability: AIProviderCapability,
         preferredProviderId?: string,
-    ): Promise<AutomationExecutionResult> {
-        const provider = await this.resolveProvider(
-            capability,
-            preferredProviderId,
-        );
+    ): Promise<ResolvedAutomationPreflight> {
+        const capability =
+            AI_CAPABILITY_BY_TARGET[
+                targetId
+            ];
+
+        if (
+            capability ===
+            undefined
+        ) {
+            return {
+                ready:
+                    true,
+                targetId,
+                requiresAI:
+                    false,
+            };
+        }
+
+        const provider =
+            await this.resolveProvider(
+                capability,
+                preferredProviderId,
+            );
 
         if (!provider) {
-            return providerBlocked(targetId, capability);
+            const preferredMessage =
+                preferredProviderId ===
+                undefined
+                    ? ""
+                    : ` O provider preferido '${preferredProviderId}' não está configurado, não está disponível ou não suporta essa capacidade.`;
+
+            return {
+                ready:
+                    false,
+                targetId,
+                requiresAI:
+                    true,
+                capability,
+                message:
+                    `A automação '${targetId}' exige IA, mas nenhum AI Provider compatível com '${capability}' está disponível.${preferredMessage} Configure e valide um provider antes de iniciar esta atividade.`,
+            };
         }
 
         return {
-            status: "unsupported",
+            ready:
+                true,
             targetId,
-            strategy: "ai",
-            message: `O provider '${provider.name}' está conectado, mas o executor específico de '${targetId}' ainda não foi implementado.`,
-            details: {
-                providerId: provider.id,
-                providerName: provider.name,
-            },
+            requiresAI:
+                true,
+            capability,
+            provider,
         };
     }
 
+    /**
+     * Finds the first compatible provider whose current configuration is
+     * actually available.
+     *
+     * A provider health check throwing is treated as unavailable, preventing a
+     * broken or partially-removed provider configuration from starting an
+     * activity.
+     */
     private async resolveProvider(
         capability: AIProviderCapability,
         preferredProviderId?: string,
     ): Promise<AIProvider | undefined> {
-        const candidates = this.providers().filter(
-            (provider) =>
-                provider.capabilities.includes(capability) &&
-                (preferredProviderId === undefined ||
-                    provider.id === preferredProviderId),
-        );
+        const candidates =
+            this.providers().filter(
+                (provider) =>
+                    provider.capabilities.includes(
+                        capability,
+                    ) &&
+                    (
+                        preferredProviderId ===
+                            undefined ||
+                        provider.id ===
+                            preferredProviderId
+                    ),
+            );
 
-        for (const provider of candidates) {
-            if (!provider.isAvailable || (await provider.isAvailable())) {
-                return provider;
+        for (
+            const provider of candidates
+        ) {
+            try {
+                if (
+                    !provider.isAvailable ||
+                    await provider.isAvailable()
+                ) {
+                    return provider;
+                }
+            } catch {
+                /*
+                 * Availability checks are intentionally fail-closed. Starting
+                 * a ClassHero attempt is more consequential than showing an
+                 * unavailable provider as a false positive.
+                 */
+                continue;
             }
         }
 
@@ -213,14 +444,35 @@ export class AutomationEngine {
     }
 }
 
+function requireResolvedProvider(
+    preflight: ResolvedAutomationPreflight,
+    targetId: AutomationTargetId,
+): AIProvider {
+    if (
+        preflight.ready &&
+        preflight.requiresAI
+    ) {
+        return preflight.provider;
+    }
+
+    throw new Error(
+        `Erro interno: o target '${targetId}' exige IA, mas chegou ao executor sem provider resolvido.`,
+    );
+}
+
 function providerBlocked(
     targetId: AutomationTargetId,
     capability: AIProviderCapability,
+    message?: string,
 ): AutomationExecutionResult {
     return {
-        status: "blocked",
+        status:
+            "blocked",
         targetId,
-        strategy: "ai",
-        message: `A atividade exige IA, mas nenhum AI Provider compatível com '${capability}' está disponível.`,
+        strategy:
+            "ai",
+        message:
+            message ??
+            `A atividade exige IA, mas nenhum AI Provider compatível com '${capability}' está disponível.`,
     };
 }
