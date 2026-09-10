@@ -1,0 +1,28 @@
+{
+  "name": "classhero-cli",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Extensible ClassHero CLI monorepo with a typed API wrapper and plugin SDK.",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "yarn@4.18.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "workspaces": [
+    "apps/cli",
+    "apps/plugins/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "build:watch": "tsc -b --watch --preserveWatchOutput",
+    "clean": "tsc -b --clean",
+    "cli": "yarn workspace @classhero-cli/cli start",
+    "start": "yarn cli"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "typescript": "7.0.2"
+  }
+}

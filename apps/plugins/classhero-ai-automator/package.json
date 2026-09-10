@@ -1,0 +1,33 @@
+{
+  "name": "@classhero-cli/classhero-ai-automator",
+  "version": "1.5.0",
+  "private": true,
+  "description": "Provider-agnostic ClassHero activity automation engine with deterministic native solvers.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -b",
+    "build:watch": "tsc -b --watch --preserveWatchOutput",
+    "clean": "tsc -b --clean"
+  },
+  "dependencies": {
+    "@classhero-cli/api-wrapper": "workspace:*",
+    "@classhero-cli/plugin-api": "workspace:*"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "license": "MIT"
+}

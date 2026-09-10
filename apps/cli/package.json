@@ -1,0 +1,31 @@
+{
+  "name": "@classhero-cli/cli",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Interactive and extensible terminal client for ClassHero.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "classhero-cli": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "build:watch": "tsc -b --watch --preserveWatchOutput",
+    "clean": "tsc -b --clean",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.7.0",
+    "@classhero-cli/api-wrapper": "workspace:*",
+    "@classhero-cli/plugin-api": "workspace:*",
+    "figlet": "^1.11.4"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "license": "MIT"
+}

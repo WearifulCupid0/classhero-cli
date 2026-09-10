@@ -1,0 +1,23 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "./packages/api-wrapper"
+    },
+    {
+      "path": "./packages/plugin-api"
+    },
+    {
+      "path": "./apps/plugins/classhero-example-plugin"
+    },
+    {
+      "path": "./apps/plugins/classhero-ai-automator"
+    },
+    {
+      "path": "./apps/plugins/classhero-ai-provider-openai"
+    },
+    {
+      "path": "./apps/cli"
+    }
+  ]
+}

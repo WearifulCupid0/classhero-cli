@@ -1,0 +1,29 @@
+{
+  "name": "@classhero-cli/api-wrapper",
+  "version": "2.0.0",
+  "description": "Typed TypeScript wrapper for the observed ClassHero HTTP API.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "ENDPOINTS.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -b",
+    "build:watch": "tsc -b --watch --preserveWatchOutput",
+    "clean": "tsc -b --clean"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "license": "MIT"
+}
