@@ -1,6 +1,12 @@
 import { Api, createQuery } from "../client/Api.js";
 import type { ApiClient } from "../client/ApiClient.js";
 import type {
+    AnagramBalanceResponse,
+    AnagramPuzzleRequest,
+    AnagramPuzzleResponse,
+    AnagramRevealLetterResponse,
+    AnagramSubmitInput,
+    AnagramSubmitResponse,
     AvailableGamesQuery,
     AvailableGamesResponse,
     GameCreditBalance,
@@ -122,17 +128,61 @@ export class HangmanGames extends Api {
     }
 }
 
-/** Game discovery plus the three student game facades currently used by ClassHero. */
+
+
+/**
+ * Anagram endpoints already shipped by the ClassHero frontend.
+ *
+ * Only `/puzzle` has been exercised in a HAR so far, where it currently
+ * returns HTTP 400 because no prepared content exists. The companion methods
+ * are mapped from the frontend bundle and intentionally remain transport-only
+ * until a successful game can be captured.
+ */
+export class AnagramGames extends Api {
+    puzzle(payload: AnagramPuzzleRequest) {
+        return this.request<AnagramPuzzleResponse>("/games/anagram/puzzle", {
+            method: "POST",
+            body: JSON.stringify(payload),
+        });
+    }
+
+    balance(puzzleId: string) {
+        return this.request<AnagramBalanceResponse>(
+            `/games/anagram/balance${createQuery({ puzzleId })}`,
+        );
+    }
+
+    revealLetter(puzzleId: string) {
+        return this.request<AnagramRevealLetterResponse>(
+            "/games/anagram/reveal-letter",
+            {
+                method: "POST",
+                body: JSON.stringify({ puzzleId }),
+            },
+        );
+    }
+
+    submit(input: AnagramSubmitInput) {
+        return this.request<AnagramSubmitResponse>("/games/anagram/submit", {
+            method: "POST",
+            body: JSON.stringify(input),
+        });
+    }
+}
+
+/** Game discovery plus the four student game facades currently shipped by ClassHero. */
 export class Games extends Api {
     readonly memory: MemoryGames;
     readonly wordSearch: WordSearchGames;
     readonly hangman: HangmanGames;
+    readonly anagram: AnagramGames;
 
     constructor(client?: ApiClient) {
         super(client);
         this.memory = new MemoryGames(this.client);
         this.wordSearch = new WordSearchGames(this.client);
         this.hangman = new HangmanGames(this.client);
+        this.anagram = new AnagramGames(this.client);
     }
 
     available(query: AvailableGamesQuery = {}) {

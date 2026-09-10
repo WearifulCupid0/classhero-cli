@@ -1,6 +1,6 @@
 import type { UnknownRecord } from "./common.js";
 
-export type GameId = "memory" | "word-search" | "hangman" | (string & {});
+export type GameId = "memory" | "word-search" | "hangman" | "anagram" | (string & {});
 export type GameMode = "estudo" | "foco" | "desafio" | (string & {});
 
 export interface AvailableGamesQuery {
@@ -212,4 +212,91 @@ export interface HangmanSubmitResponse extends UnknownRecord {
     message: string;
     attempt_id: string;
     pedagogical_credit_award: PedagogicalCreditAward | null;
+}
+
+
+/**
+ * Request used to obtain an Anagram puzzle.
+ *
+ * The fifth HAR confirms the same material/mode/source payload used by the
+ * embedded game panel for the other material-linked mini-games.
+ */
+export type AnagramPuzzleRequest = MissionGameStartPayload;
+
+/**
+ * Minimal successful puzzle shape read by the current ClassHero frontend.
+ *
+ * A successful response has not yet been captured because the backend reports
+ * that no prepared Anagram content exists. These fields are nevertheless
+ * confirmed by the shipped frontend component itself.
+ */
+export interface AnagramPuzzleResponse extends UnknownRecord {
+    puzzle_id: string;
+    /** Each nested array is one scrambled word/group displayed to the user. */
+    scrambled_groups: string[][];
+    hint: string;
+    content_id: string;
+}
+
+/** Credit balance queried by the Anagram UI outside Study mode. */
+export interface AnagramBalanceResponse extends UnknownRecord {
+    available_credits: number;
+}
+
+/** Body submitted when the user asks the Anagram for one revealed position. */
+export interface AnagramRevealLetterInput {
+    puzzleId: string;
+}
+
+/** Position revealed by the ClassHero Anagram helper endpoint. */
+export interface AnagramRevealLetterResponse extends UnknownRecord {
+    word_index: number;
+    position: number;
+    letter: string;
+    revealed_count: number;
+    emergency?: boolean;
+    penalty_points?: number;
+    balance?: {
+        available_credits: number;
+        [key: string]: unknown;
+    };
+}
+
+/**
+ * Final/full-term Anagram submission used by the current web client.
+ *
+ * `answer` is built by joining each reordered scrambled group into a word and
+ * then joining the words with one space.
+ */
+export interface AnagramSubmitInput extends UnknownRecord {
+    puzzleId: string;
+    answer: string;
+    materialId?: string;
+    missionId: string;
+    context: "material" | "mission" | (string & {});
+    mode: GameMode;
+    time_seconds: number;
+    hintsUsed: number;
+    bonusApplied: boolean;
+    xpPreview: number;
+    content_id: string;
+    clientGameStatus: string;
+}
+
+/**
+ * Fields consumed by the current Anagram frontend after `/submit`.
+ *
+ * Optionality reflects that both incorrect submissions and final successful
+ * submissions are handled by the same endpoint.
+ */
+export interface AnagramSubmitResponse extends UnknownRecord {
+    attempt_id?: string;
+    won: boolean;
+    wrong_submit_count?: number;
+    message?: string;
+    revealed_term?: string;
+    allow_retry?: boolean;
+    xp_awarded?: number;
+    score?: number;
+    pedagogical_credit_award?: PedagogicalCreditAward | null;
 }

@@ -52,3 +52,27 @@ export interface ThemeBonusDates extends UnknownRecord {
     bonus_full_weight_end_date?: StringNullable;
     bonus_final_date?: StringNullable;
 }
+
+
+/**
+ * Mission-closure payload accepted by the student closure endpoint.
+ *
+ * The fifth HAR directly observes `{ status: "waived" }`; the text/checkpoint
+ * fields mirror the closure record already returned by the same resource.
+ */
+export interface ThemeClosureSubmission extends UnknownRecord {
+    status: string;
+    understood_text?: StringNullable;
+    doubts_text?: StringNullable;
+    application_text?: StringNullable;
+    question_text?: StringNullable;
+    checkpoint_responses?: UnknownRecord | unknown[] | null;
+}
+
+/**
+ * Bonus/evaluation data for a submitted mission closure.
+ *
+ * The fifth HAR confirms the endpoint but its response body was not preserved,
+ * so the structure intentionally stays forward-compatible.
+ */
+export interface ThemeClosureEvaluation extends UnknownRecord {}

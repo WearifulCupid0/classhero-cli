@@ -4,6 +4,8 @@ import type {
     GenericMessage,
     ThemeBonusDates,
     ThemeClosure,
+    ThemeClosureEvaluation,
+    ThemeClosureSubmission,
     ThemesByCourseResponse,
     UnknownRecord,
 } from "../types/index.js";
@@ -16,6 +18,27 @@ export class Themes extends Api {
 
     closure(themeId: string) {
         return this.request<ThemeClosure>(`/themes/${encodeURIComponent(themeId)}/closure`);
+    }
+
+    /** Saves/submits the student's mission closure state. */
+    submitClosure(
+        themeId: string,
+        input: ThemeClosureSubmission,
+    ) {
+        return this.request<ThemeClosure>(
+            `/themes/${encodeURIComponent(themeId)}/closure`,
+            {
+                method: "POST",
+                body: JSON.stringify(input),
+            },
+        );
+    }
+
+    /** Loads the bonus/evaluation produced for a submitted mission closure. */
+    closureEvaluation(themeId: string) {
+        return this.request<ThemeClosureEvaluation>(
+            `/themes/${encodeURIComponent(themeId)}/closure/evaluation`,
+        );
     }
 
     myBonusDates(themeId: string) {

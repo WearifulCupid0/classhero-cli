@@ -12,7 +12,7 @@ export interface ObservedEndpoint {
     readonly responseTopLevel: readonly string[];
 }
 
-/** Sanitized union of endpoint signatures observed across the four supplied HAR files. */
+/** Sanitized union of endpoint signatures observed across the five supplied HAR files. */
 export const observedEndpoints = [
     {
         method: "GET",
@@ -49,6 +49,15 @@ export const observedEndpoints = [
         requestBodyKeys: [],
         responseKind: ["object"],
         responseTopLevel: ["message"],
+    },
+    {
+        method: "POST",
+        path: "/auth/refresh-token",
+        statuses: [201],
+        queryKeys: [],
+        requestBodyKeys: [],
+        responseKind: ["object"],
+        responseTopLevel: ["access_token", "access_token_vm", "expires_in", "message", "refresh_token", "refresh_token_vm"],
     },
     {
         method: "POST",
@@ -115,6 +124,15 @@ export const observedEndpoints = [
     },
     {
         method: "GET",
+        path: "/content-ratings/mission/:id/mine",
+        statuses: [200],
+        queryKeys: [],
+        requestBodyKeys: [],
+        responseKind: [],
+        responseTopLevel: [],
+    },
+    {
+        method: "GET",
         path: "/courses/:id/stream-cover",
         statuses: [200],
         queryKeys: [],
@@ -175,6 +193,15 @@ export const observedEndpoints = [
         requestBodyKeys: [],
         responseKind: ["object"],
         responseTopLevel: ["data"],
+    },
+    {
+        method: "POST",
+        path: "/games/anagram/puzzle",
+        statuses: [400],
+        queryKeys: [],
+        requestBodyKeys: ["materialId", "mode", "themeMissionMaterialId"],
+        responseKind: ["object"],
+        responseTopLevel: ["message", "path", "statusCode", "timestamp"],
     },
     {
         method: "POST",
@@ -313,6 +340,15 @@ export const observedEndpoints = [
     },
     {
         method: "POST",
+        path: "/gamification/purchase",
+        statuses: [201],
+        queryKeys: [],
+        requestBodyKeys: ["item_id"],
+        responseKind: ["object"],
+        responseTopLevel: ["current_level", "item_id", "item_key", "last_purchase_at", "ledger_id", "ownership_id", "price_xp", "purchase_id", "purchased_at", "slot_key", "student_email", "xp_available", "xp_spent_total", "xp_total"],
+    },
+    {
+        method: "POST",
         path: "/gamification/pedagogical-credits/purchase",
         statuses: [201],
         queryKeys: [],
@@ -448,11 +484,29 @@ export const observedEndpoints = [
     },
     {
         method: "GET",
+        path: "/missions/:id/journey-map/:id/videos/closing",
+        statuses: [206],
+        queryKeys: ["v"],
+        requestBodyKeys: [],
+        responseKind: ["binary"],
+        responseTopLevel: [],
+    },
+    {
+        method: "GET",
         path: "/missions/:id/journey-map/:id/videos/opening",
         statuses: [206],
         queryKeys: ["v"],
         requestBodyKeys: [],
         responseKind: ["binary"],
+        responseTopLevel: [],
+    },
+    {
+        method: "POST",
+        path: "/missions/:id/journey-map/:id/videos/closing/student/progress",
+        statuses: [200],
+        queryKeys: [],
+        requestBodyKeys: ["completed", "current_position_seconds", "duration_seconds", "max_watched_seconds", "watched_percentage"],
+        responseKind: ["object"],
         responseTopLevel: [],
     },
     {
@@ -768,7 +822,7 @@ export const observedEndpoints = [
         queryKeys: [],
         requestBodyKeys: [],
         responseKind: ["object"],
-        responseTopLevel: ["already_completed", "attempt_id", "attempt_multiplier_applied", "attempt_number", "awarded_as_first_completion", "completed_at", "completion_bonus", "completion_bonus_awarded", "correct_steps", "created_at", "level_key", "material_id", "metadata", "path_id", "replay_factor_applied", "started_at", "status", "step_xp_after_scaling", "step_xp_before_scaling", "student_email", "theme_id", "total_steps", "total_xp_awarded", "updated_at", "wrong_steps", "xp_possible"],
+        responseTopLevel: ["already_completed", "attempt_id", "attempt_multiplier_applied", "attempt_number", "awarded_as_first_completion", "completed_at", "completion_bonus", "completion_bonus_awarded", "correct_steps", "created_at", "last_step_position", "level_key", "material_id", "metadata", "path_id", "replay_factor_applied", "started_at", "status", "step_xp_after_scaling", "step_xp_before_scaling", "student_email", "theme_id", "total_steps", "total_xp_awarded", "updated_at", "wrong_steps", "xp_possible"],
     },
     {
         method: "GET",
@@ -835,12 +889,30 @@ export const observedEndpoints = [
     },
     {
         method: "GET",
+        path: "/themes/:id/closure/evaluation",
+        statuses: [200],
+        queryKeys: [],
+        requestBodyKeys: [],
+        responseKind: ["object"],
+        responseTopLevel: [],
+    },
+    {
+        method: "GET",
         path: "/themes/:id/closure",
         statuses: [200],
         queryKeys: [],
         requestBodyKeys: [],
         responseKind: ["object"],
         responseTopLevel: ["application_text", "checkpoint_responses", "closure_id", "doubts_text", "question_text", "status", "student_email", "submitted_at", "theme_id", "understood_text"],
+    },
+    {
+        method: "POST",
+        path: "/themes/:id/closure",
+        statuses: [201],
+        queryKeys: [],
+        requestBodyKeys: ["status"],
+        responseKind: ["object"],
+        responseTopLevel: [],
     },
     {
         method: "GET",
