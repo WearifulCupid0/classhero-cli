@@ -12,6 +12,7 @@ import type {
 export type AIProviderCapability =
     | "quiz"
     | "hangman"
+    | "anagram"
     | "interactive-path"
     | "code"
     | "discursive"

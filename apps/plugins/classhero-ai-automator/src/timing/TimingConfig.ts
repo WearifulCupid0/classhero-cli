@@ -4,7 +4,7 @@ import type { GameMode } from "@classhero-cli/api-wrapper";
 export type KnownGameMode = "estudo" | "foco" | "desafio";
 
 /** Mini-games that use difficulty-specific minimum durations. */
-export type TimedMiniGame = "wordSearch" | "memory" | "hangman";
+export type TimedMiniGame = "wordSearch" | "memory" | "hangman" | "anagram";
 
 /** Minimum duration, in seconds, for each ClassHero game difficulty. */
 export interface GameDifficultyTiming {
@@ -56,6 +56,15 @@ export const DEFAULT_TIMING_CONFIG: AutomatorTimingConfig = {
             foco: 45,
             desafio: 60,
         },
+        /**
+         * Provisional defaults only. The Anagram executor is intentionally
+         * disabled until a successful game capture is available.
+         */
+        anagram: {
+            estudo: 30,
+            foco: 45,
+            desafio: 60,
+        },
     },
     quiz: {
         secondsPerQuestion: 30,
@@ -95,6 +104,7 @@ export function cloneTimingConfig(
             wordSearch: { ...config.games.wordSearch },
             memory: { ...config.games.memory },
             hangman: { ...config.games.hangman },
+            anagram: { ...config.games.anagram },
         },
         quiz: {
             ...config.quiz,

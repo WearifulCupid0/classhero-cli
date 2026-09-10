@@ -95,6 +95,7 @@ const AI_CAPABILITY_BY_TARGET: Readonly<
     Partial<Record<AutomationTargetId, AIProviderCapability>>
 > = {
     hangman: "hangman",
+    anagram: "anagram",
     quiz: "quiz",
     "interactive-path": "interactive-path",
     code: "code",
@@ -309,6 +310,7 @@ export class AutomationEngine {
                 );
             }
 
+            case "anagram":
             case "code":
             case "discursive": {
                 const provider =

@@ -118,6 +118,10 @@ function normalizeConfig(value: unknown): AutomatorTimingConfig {
                 games.hangman,
                 defaults.games.hangman,
             ),
+            anagram: normalizeGameTiming(
+                games.anagram,
+                defaults.games.anagram,
+            ),
         },
         quiz: {
             secondsPerQuestion: normalizeSeconds(

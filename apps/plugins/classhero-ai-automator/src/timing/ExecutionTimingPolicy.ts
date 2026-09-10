@@ -31,7 +31,7 @@ export interface TimingWaitResult {
  */
 export interface GameProgressSchedule {
     readonly enabled: boolean;
-    readonly targetId: "word-search" | "memory" | "hangman";
+    readonly targetId: "word-search" | "memory" | "hangman" | "anagram";
     readonly gameMinimumSeconds: number;
     readonly totalUnits: number;
     readonly intervalSeconds: number;
@@ -39,7 +39,7 @@ export interface GameProgressSchedule {
 
 /** Result returned after waiting for one cumulative progress checkpoint. */
 export interface GameProgressCheckpointResult extends TimingWaitResult {
-    readonly targetId: "word-search" | "memory" | "hangman";
+    readonly targetId: "word-search" | "memory" | "hangman" | "anagram";
     readonly completedUnits: number;
     readonly totalUnits: number;
     readonly gameMinimumSeconds: number;
@@ -89,7 +89,7 @@ export class ExecutionTimingPolicy {
      * backwards compatible.
      */
     async getGameProgressSchedule(input: {
-        readonly targetId: "word-search" | "memory" | "hangman";
+        readonly targetId: "word-search" | "memory" | "hangman" | "anagram";
         readonly mode: GameMode;
         readonly totalUnits: number;
     }): Promise<GameProgressSchedule> {
@@ -124,7 +124,7 @@ export class ExecutionTimingPolicy {
      * - if checkpoint 1 validation takes 2s, checkpoint 2 waits only ~8s.
      */
     async waitForGameProgress(input: {
-        readonly targetId: "word-search" | "memory" | "hangman";
+        readonly targetId: "word-search" | "memory" | "hangman" | "anagram";
         readonly mode: GameMode;
         readonly startedAt: number;
         readonly completedUnits: number;
@@ -192,7 +192,7 @@ export class ExecutionTimingPolicy {
      * has elapsed.
      */
     async waitForGame(input: {
-        readonly targetId: "word-search" | "memory" | "hangman";
+        readonly targetId: "word-search" | "memory" | "hangman" | "anagram";
         readonly mode: GameMode;
         readonly startedAt: number;
     }): Promise<TimingWaitResult> {
@@ -327,7 +327,7 @@ export class ExecutionTimingPolicy {
 }
 
 function toTimedMiniGame(
-    targetId: "word-search" | "memory" | "hangman",
+    targetId: "word-search" | "memory" | "hangman" | "anagram",
 ): TimedMiniGame {
     switch (targetId) {
         case "word-search":
@@ -336,6 +336,8 @@ function toTimedMiniGame(
             return "memory";
         case "hangman":
             return "hangman";
+        case "anagram":
+            return "anagram";
     }
 }
 

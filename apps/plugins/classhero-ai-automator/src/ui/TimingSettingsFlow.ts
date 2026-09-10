@@ -17,6 +17,7 @@ type GameAction =
     | "wordSearch"
     | "memory"
     | "hangman"
+    | "anagram"
     | "back";
 
 /**
@@ -150,6 +151,11 @@ export class TimingSettingsFlow {
                         "hangman",
                         "Forca",
                         config.games.hangman,
+                    ),
+                    gameOption(
+                        "anagram",
+                        "Anagrama",
+                        config.games.anagram,
                     ),
                     {
                         id: "classhero-ai-automator.settings.games.back",
@@ -326,6 +332,8 @@ function gameLabel(game: TimedMiniGame): string {
             return "Jogo da memória";
         case "hangman":
             return "Forca";
+        case "anagram":
+            return "Anagrama";
     }
 }
 

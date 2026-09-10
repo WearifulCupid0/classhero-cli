@@ -18,6 +18,7 @@ export type AutomationTargetId =
     | "word-search"
     | "memory"
     | "hangman"
+    | "anagram"
     | "quiz"
     | "interactive-path"
     | "code"
