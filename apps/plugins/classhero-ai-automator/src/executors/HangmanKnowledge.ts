@@ -20,11 +20,36 @@ export interface HangmanGuessEvidence {
     readonly attemptsLeftAfter: number;
 }
 
+/** Why one AI word hypothesis was discarded. */
+export type HangmanCandidateFailureReason =
+    | "local-validation"
+    | "backend-wrong-letter"
+    | "did-not-complete";
+
+/**
+ * Explicit evidence attached to an incorrect AI word hypothesis.
+ *
+ * This structure is sent back to the provider on the next reasoning round so
+ * the model does not have to infer which previous word failed or why.
+ */
+export interface HangmanCandidateFailure {
+    /** Candidate after strict ClassHero-compatible A-Z normalization. */
+    readonly candidate: string;
+    readonly reason: HangmanCandidateFailureReason;
+    readonly detail: string;
+    /** Letters specifically proven wrong while testing this candidate. */
+    readonly rejectedLetters: readonly string[];
+    readonly maskBefore: string;
+    readonly maskAfter: string;
+    readonly wrongCountBefore: number;
+    readonly wrongCountAfter: number;
+}
+
 /**
  * Knowledge accumulated while solving one hangman puzzle.
  *
- * `wrongLetters` are not guessed heuristically: a letter enters this set only
- * when ClassHero increments `wrongCount` after that concrete guess.
+ * `wrongLetters` are authoritative: a letter enters this set only when
+ * ClassHero increments `wrongCount` for that concrete `/guess`.
  */
 export interface HangmanKnowledge {
     readonly mask: string;
@@ -35,11 +60,13 @@ export interface HangmanKnowledge {
     readonly attemptsLeft: number;
     readonly guessHistory: readonly HangmanGuessEvidence[];
     readonly rejectedCandidates: readonly string[];
+    readonly candidateFailures: readonly HangmanCandidateFailure[];
 }
 
 /** Result of checking one AI candidate against facts already proven by ClassHero. */
 export interface HangmanCandidateValidation {
     readonly valid: boolean;
+    readonly normalizedCandidate: string;
     readonly reason?: string;
 }
 
@@ -58,6 +85,7 @@ export function createInitialHangmanKnowledge(
         attemptsLeft: 6,
         guessHistory: [],
         rejectedCandidates: [],
+        candidateFailures: [],
     };
 }
 
@@ -77,7 +105,7 @@ export function applyHangmanGuess(
     readonly evidence: HangmanGuessEvidence;
 } {
     const normalizedLetter =
-        normalizeLetter(letter);
+        normalizeHangmanLetter(letter);
 
     const wrong =
         response.wrongCount >
@@ -163,44 +191,113 @@ export function applyHangmanGuess(
             rejectedCandidates: [
                 ...knowledge.rejectedCandidates,
             ],
+            candidateFailures: [
+                ...knowledge.candidateFailures,
+            ],
         },
         evidence,
     };
 }
 
-/** Adds a candidate to the immutable rejected-candidate history. */
+/**
+ * Records one discarded word hypothesis together with the concrete reason.
+ *
+ * Duplicate candidate/reason/evidence combinations are not inserted twice.
+ */
+export function recordHangmanCandidateFailure(
+    knowledge: HangmanKnowledge,
+    failure: HangmanCandidateFailure,
+): HangmanKnowledge {
+    const candidate =
+        normalizeCandidateWord(
+            failure.candidate,
+        );
+
+    const normalizedFailure:
+        HangmanCandidateFailure = {
+        ...failure,
+        candidate,
+        rejectedLetters:
+            uniqueLetters(
+                failure.rejectedLetters,
+            ),
+    };
+
+    const rejectedCandidates =
+        candidate.length > 0 &&
+        !knowledge.rejectedCandidates.includes(
+            candidate,
+        )
+            ? [
+                ...knowledge.rejectedCandidates,
+                candidate,
+            ]
+            : [
+                ...knowledge.rejectedCandidates,
+            ];
+
+    const duplicate =
+        knowledge.candidateFailures.some(
+            (current) =>
+                current.candidate ===
+                    normalizedFailure.candidate &&
+                current.reason ===
+                    normalizedFailure.reason &&
+                current.wrongCountAfter ===
+                    normalizedFailure.wrongCountAfter &&
+                current.maskAfter ===
+                    normalizedFailure.maskAfter,
+        );
+
+    return {
+        ...knowledge,
+        rejectedCandidates,
+        candidateFailures:
+            duplicate
+                ? [
+                    ...knowledge.candidateFailures,
+                ]
+                : [
+                    ...knowledge.candidateFailures,
+                    normalizedFailure,
+                ],
+    };
+}
+
+/**
+ * Backwards-compatible shorthand used by older call sites.
+ */
 export function rejectHangmanCandidate(
     knowledge: HangmanKnowledge,
     candidate: string,
 ): HangmanKnowledge {
-    const normalized =
-        normalizeCandidateWord(
+    return recordHangmanCandidateFailure(
+        knowledge,
+        {
             candidate,
-        );
-
-    if (
-        normalized.length === 0 ||
-        knowledge.rejectedCandidates.includes(
-            normalized,
-        )
-    ) {
-        return knowledge;
-    }
-
-    return {
-        ...knowledge,
-        rejectedCandidates: [
-            ...knowledge.rejectedCandidates,
-            normalized,
-        ],
-    };
+            reason:
+                "local-validation",
+            detail:
+                "A candidata foi descartada sem nova evidência do backend.",
+            rejectedLetters: [],
+            maskBefore:
+                knowledge.mask,
+            maskAfter:
+                knowledge.mask,
+            wrongCountBefore:
+                knowledge.wrongCount,
+            wrongCountAfter:
+                knowledge.wrongCount,
+        },
+    );
 }
 
 /**
  * Validates a candidate against everything already proven by ClassHero.
  *
- * This prevents wasting attempts on words that contradict the current mask or
- * contain letters that have already increased `wrongCount`.
+ * Provider text is first normalized to the only outbound alphabet allowed by
+ * this executor: `A-Z`. Diacritics are removed and every other character,
+ * including numbers, spaces, punctuation and symbols, is discarded.
  */
 export function validateHangmanCandidate(
     candidate: string,
@@ -212,8 +309,22 @@ export function validateHangmanCandidate(
             candidate,
         );
 
+    if (
+        normalized.length === 0
+    ) {
+        return {
+            valid: false,
+            normalizedCandidate:
+                normalized,
+            reason:
+                "a resposta não contém nenhuma letra válida no alfabeto A-Z",
+        };
+    }
+
     const letters =
-        Array.from(normalized);
+        Array.from(
+            normalized,
+        );
 
     if (
         letters.length !==
@@ -221,6 +332,8 @@ export function validateHangmanCandidate(
     ) {
         return {
             valid: false,
+            normalizedCandidate:
+                normalized,
             reason:
                 `quantidade de letras ${letters.length} diferente de ${puzzle.word_length}`,
         };
@@ -233,8 +346,10 @@ export function validateHangmanCandidate(
     ) {
         return {
             valid: false,
+            normalizedCandidate:
+                normalized,
             reason:
-                "a candidata já foi descartada em uma análise anterior",
+                "a candidata já foi comprovada incorreta em uma análise anterior",
         };
     }
 
@@ -263,15 +378,17 @@ export function validateHangmanCandidate(
             }
 
             if (
-                normalizeLetter(
+                normalizeHangmanLetter(
                     known,
                 ) !==
-                normalizeLetter(
+                normalizeHangmanLetter(
                     letters[index] ?? "",
                 )
             ) {
                 return {
                     valid: false,
+                    normalizedCandidate:
+                        normalized,
                     reason:
                         `a candidata contradiz a máscara na posição ${index + 1}`,
                 };
@@ -282,7 +399,7 @@ export function validateHangmanCandidate(
     const candidateLetterSet =
         new Set(
             letters.map(
-                normalizeLetter,
+                normalizeHangmanLetter,
             ),
         );
 
@@ -290,7 +407,7 @@ export function validateHangmanCandidate(
         knowledge.wrongLetters.find(
             (letter) =>
                 candidateLetterSet.has(
-                    normalizeLetter(
+                    normalizeHangmanLetter(
                         letter,
                     ),
                 ),
@@ -299,6 +416,8 @@ export function validateHangmanCandidate(
     if (forbidden) {
         return {
             valid: false,
+            normalizedCandidate:
+                normalized,
             reason:
                 `a candidata contém a letra '${forbidden}', já comprovadamente errada pelo wrongCount`,
         };
@@ -306,14 +425,13 @@ export function validateHangmanCandidate(
 
     return {
         valid: true,
+        normalizedCandidate:
+            normalized,
     };
 }
 
 /**
- * Returns unique candidate letters that have not been tested yet.
- *
- * The executor stops at the first newly-proven wrong letter and asks the AI
- * for another word rather than blindly finishing the previous candidate.
+ * Returns unique A-Z letters from one candidate that have not been tested yet.
  */
 export function candidateLettersToTry(
     candidate: string,
@@ -322,7 +440,7 @@ export function candidateLettersToTry(
     const used =
         new Set(
             knowledge.guessedLetters.map(
-                normalizeLetter,
+                normalizeHangmanLetter,
             ),
         );
 
@@ -338,12 +456,14 @@ export function candidateLettersToTry(
             )
     ) {
         const letter =
-            normalizeLetter(
+            normalizeHangmanLetter(
                 character,
             );
 
         if (
-            letter.length !== 1 ||
+            !isAsciiHangmanLetter(
+                letter,
+            ) ||
             used.has(letter)
         ) {
             continue;
@@ -356,23 +476,62 @@ export function candidateLettersToTry(
     return result;
 }
 
-/** Normalizes one provider candidate for comparison/submission planning. */
+/**
+ * Converts arbitrary provider text into the exact outbound alphabet A-Z.
+ *
+ * Examples:
+ * - `AÇÃO` -> `ACAO`
+ * - `node.js` -> `NODEJS`
+ * - `API2` -> `API`
+ */
 export function normalizeCandidateWord(
     value: string,
 ): string {
-    return Array.from(
-        value.normalize("NFC"),
-    )
-        .filter(
-            (character) =>
-                /\p{L}/u.test(
-                    character,
-                ),
+    return value
+        .normalize("NFD")
+        .replace(
+            /[\u0300-\u036f]/g,
+            "",
         )
-        .join("")
         .toLocaleUpperCase(
-            "pt-BR",
+            "en-US",
+        )
+        .replace(
+            /[^A-Z]/g,
+            "",
         );
+}
+
+/** Converts one arbitrary character into exactly one ASCII A-Z letter. */
+export function normalizeHangmanLetter(
+    value: string,
+): string {
+    return value
+        .normalize("NFD")
+        .replace(
+            /[\u0300-\u036f]/g,
+            "",
+        )
+        .toLocaleUpperCase(
+            "en-US",
+        )
+        .replace(
+            /[^A-Z]/g,
+            "",
+        )
+        .slice(
+            0,
+            1,
+        );
+}
+
+/** Returns whether a value is exactly one ClassHero-compatible A-Z letter. */
+export function isAsciiHangmanLetter(
+    value: string,
+): boolean {
+    return /^[A-Z]$/.test(
+        value,
+    );
 }
 
 function revealedLetters(
@@ -385,7 +544,7 @@ function revealedLetters(
                     character !== "_",
             )
             .map(
-                normalizeLetter,
+                normalizeHangmanLetter,
             )
             .filter(Boolean),
     );
@@ -395,11 +554,10 @@ function maskCharacters(
     mask: string,
 ): string[] {
     return Array.from(
-        mask
-            .replace(
-                /\s+/g,
-                "",
-            ),
+        mask.replace(
+            /\s+/g,
+            "",
+        ),
     );
 }
 
@@ -413,39 +571,28 @@ function uniqueLetters(
 
     for (const value of values) {
         const normalized =
-            normalizeLetter(
+            normalizeHangmanLetter(
                 value,
             );
 
         if (
-            normalized.length !== 1 ||
-            seen.has(normalized)
+            !isAsciiHangmanLetter(
+                normalized,
+            ) ||
+            seen.has(
+                normalized,
+            )
         ) {
             continue;
         }
 
-        seen.add(normalized);
-        result.push(normalized);
+        seen.add(
+            normalized,
+        );
+        result.push(
+            normalized,
+        );
     }
 
     return result;
-}
-
-function normalizeLetter(
-    value: string,
-): string {
-    return value
-        .normalize("NFD")
-        .replace(
-            /[\u0300-\u036f]/g,
-            "",
-        )
-        .toLocaleUpperCase(
-            "pt-BR",
-        )
-        .replace(
-            /[^A-ZÇ]/g,
-            "",
-        )
-        .slice(0, 1);
 }

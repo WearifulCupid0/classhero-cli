@@ -4,6 +4,10 @@ import type {
     HangmanGuessResponse,
     HangmanPuzzle,
 } from "@classhero-cli/api-wrapper";
+import {
+    getSourceMissionMaterialId,
+    requireActivityTarget,
+} from "../context/ActivityTargets.js";
 import type {
     ActivityContext,
     AutomationExecutionResult,
@@ -18,10 +22,6 @@ import {
 import type {
     AIProvider,
 } from "../providers/contracts.js";
-import {
-    getSourceMissionMaterialId,
-    requireActivityTarget,
-} from "../context/ActivityTargets.js";
 import type {
     ExecutionTimingPolicy,
 } from "../timing/ExecutionTimingPolicy.js";
@@ -29,7 +29,10 @@ import {
     applyHangmanGuess,
     candidateLettersToTry,
     createInitialHangmanKnowledge,
-    rejectHangmanCandidate,
+    isAsciiHangmanLetter,
+    normalizeCandidateWord,
+    normalizeHangmanLetter,
+    recordHangmanCandidateFailure,
     validateHangmanCandidate,
     type HangmanKnowledge,
 } from "./HangmanKnowledge.js";
@@ -42,10 +45,15 @@ const MAX_AI_ROUNDS = 8;
 /**
  * AI-backed ClassHero hangman executor.
  *
- * Every provider answer is only a hypothesis. ClassHero's `mask` and
- * `wrongCount` transitions are the source of truth. At the first newly-proven
- * wrong letter the current candidate is abandoned and the updated evidence is
- * sent back to the AI for a different word.
+ * Every AI word is only a hypothesis. Each outbound letter is:
+ *
+ * 1. normalized to strict A-Z;
+ * 2. paced according to the configured game duration;
+ * 3. individually submitted to `/games/forca/guess`;
+ * 4. classified using the authoritative `wrongCount` transition.
+ *
+ * At the first newly-proven wrong letter the current candidate is marked
+ * incorrect and the complete evidence is sent back to the AI.
  */
 export class HangmanExecutor {
     constructor(
@@ -61,8 +69,16 @@ export class HangmanExecutor {
         provider: AIProvider,
     ): Promise<AutomationExecutionResult> {
         try {
-            const target = requireActivityTarget(context, "games");
-            const sourceMissionMaterialId = getSourceMissionMaterialId(context);
+            const target =
+                requireActivityTarget(
+                    context,
+                    "games",
+                );
+
+            const sourceMissionMaterialId =
+                getSourceMissionMaterialId(
+                    context,
+                );
 
             const response =
                 await this.api.games.hangman.puzzle({
@@ -144,71 +160,208 @@ export class HangmanExecutor {
                     );
                 }
 
+                const normalizedCandidate =
+                    normalizeCandidateWord(
+                        answer.word,
+                    );
+
                 this.activityLogger.hangmanAiAnswer(
                     answer.word,
+                    normalizedCandidate,
                     provider.name,
                 );
 
                 const validation =
                     validateHangmanCandidate(
-                        answer.word,
+                        normalizedCandidate,
                         puzzle,
                         knowledge,
                     );
 
                 if (!validation.valid) {
+                    const detail =
+                        validation.reason ??
+                        "a candidata contradiz as evidências atuais";
+
                     knowledge =
-                        rejectHangmanCandidate(
+                        recordHangmanCandidateFailure(
                             knowledge,
-                            answer.word,
+                            {
+                                candidate:
+                                    normalizedCandidate,
+                                reason:
+                                    "local-validation",
+                                detail,
+                                rejectedLetters: [],
+                                maskBefore:
+                                    knowledge.mask,
+                                maskAfter:
+                                    knowledge.mask,
+                                wrongCountBefore:
+                                    knowledge.wrongCount,
+                                wrongCountAfter:
+                                    knowledge.wrongCount,
+                            },
                         );
 
                     this.activityLogger.hangmanCandidateRejected(
-                        answer.word,
-                        validation.reason ??
-                            "a candidata contradiz as evidências atuais",
+                        normalizedCandidate ||
+                            answer.word,
+                        detail,
                     );
 
                     continue;
                 }
+
+                const candidate =
+                    validation.normalizedCandidate;
 
                 const letters =
                     candidateLettersToTry(
-                        answer.word,
+                        candidate,
                         knowledge,
                     );
 
-                if (letters.length === 0) {
+                if (
+                    letters.length === 0
+                ) {
+                    const detail =
+                        "a palavra não trouxe nenhuma letra A-Z nova para testar";
+
                     knowledge =
-                        rejectHangmanCandidate(
+                        recordHangmanCandidateFailure(
                             knowledge,
-                            answer.word,
+                            {
+                                candidate,
+                                reason:
+                                    "local-validation",
+                                detail,
+                                rejectedLetters: [],
+                                maskBefore:
+                                    knowledge.mask,
+                                maskAfter:
+                                    knowledge.mask,
+                                wrongCountBefore:
+                                    knowledge.wrongCount,
+                                wrongCountAfter:
+                                    knowledge.wrongCount,
+                            },
                         );
 
                     this.activityLogger.hangmanCandidateRejected(
-                        answer.word,
-                        "a palavra não trouxe nenhuma letra nova para testar",
+                        candidate,
+                        detail,
                     );
 
                     continue;
                 }
+
+                const candidateMaskBefore =
+                    knowledge.mask;
+
+                const candidateWrongCountBefore =
+                    knowledge.wrongCount;
+
+                /*
+                 * Adaptive estimate:
+                 * already-sent guesses + remaining letters in this candidate.
+                 *
+                 * If a candidate fails, the next AI round recalculates this
+                 * estimate using the new mask and new candidate. The final
+                 * waitForGame() still guarantees the configured total minimum.
+                 */
+                const plannedTotalGuesses =
+                    knowledge.guessHistory.length +
+                    letters.length;
+
+                const schedule =
+                    await this.timing.getGameProgressSchedule({
+                        targetId:
+                            "hangman",
+                        mode,
+                        totalUnits:
+                            plannedTotalGuesses,
+                    });
+
+                this.activityLogger.hangmanCandidatePacingPlanned({
+                    candidate,
+                    mode,
+                    gameMinimumSeconds:
+                        schedule.gameMinimumSeconds,
+                    alreadySent:
+                        knowledge.guessHistory.length,
+                    pendingLetters:
+                        letters,
+                    plannedTotalGuesses:
+                        schedule.totalUnits,
+                    intervalSeconds:
+                        schedule.intervalSeconds,
+                    enabled:
+                        schedule.enabled,
+                });
 
                 let candidateProvenWrong =
                     false;
 
-                for (const letter of letters) {
+                for (
+                    const letter of letters
+                ) {
+                    /*
+                     * candidateLettersToTry() already guarantees this, but the
+                     * second guard ensures no future refactor can ever send a
+                     * non-A-Z character to ClassHero.
+                     */
+                    const outboundLetter =
+                        normalizeHangmanLetter(
+                            letter,
+                        );
+
+                    if (
+                        !isAsciiHangmanLetter(
+                            outboundLetter,
+                        )
+                    ) {
+                        return failed(
+                            `A letra '${letter}' foi bloqueada porque não pode ser normalizada para A-Z.`,
+                        );
+                    }
+
+                    const completedUnits =
+                        knowledge.guessHistory.length +
+                        1;
+
+                    const checkpoint =
+                        await this.timing.waitForGameProgress({
+                            targetId:
+                                "hangman",
+                            mode,
+                            startedAt:
+                                timingStartedAt,
+                            completedUnits,
+                            totalUnits:
+                                plannedTotalGuesses,
+                        });
+
+                    this.activityLogger.hangmanGuessValidationStarting(
+                        outboundLetter,
+                        candidate,
+                        completedUnits,
+                        plannedTotalGuesses,
+                        checkpoint.checkpointSeconds,
+                    );
+
                     const previousKnowledge =
                         knowledge;
 
                     const guessed =
                         await this.api.games.hangman.guess(
-                            letter,
+                            outboundLetter,
                             puzzle.puzzle_id,
                         );
 
                     if (!guessed.ok) {
                         return failed(
-                            `Falha ao validar a letra '${letter}' na forca (HTTP ${guessed.status}).`,
+                            `Falha ao validar a letra '${outboundLetter}' na forca (HTTP ${guessed.status}).`,
                         );
                     }
 
@@ -218,7 +371,7 @@ export class HangmanExecutor {
                     const applied =
                         applyHangmanGuess(
                             previousKnowledge,
-                            letter,
+                            outboundLetter,
                             backendState,
                         );
 
@@ -244,20 +397,42 @@ export class HangmanExecutor {
                         candidateProvenWrong =
                             true;
 
+                        const detail =
+                            `A palavra '${candidate}' está incorreta porque a letra '${applied.evidence.letter}' foi rejeitada pelo ClassHero: wrongCount ${applied.evidence.wrongCountBefore} -> ${applied.evidence.wrongCountAfter}. Máscara atual: ${applied.evidence.maskAfter}.`;
+
                         knowledge =
-                            rejectHangmanCandidate(
+                            recordHangmanCandidateFailure(
                                 knowledge,
-                                answer.word,
+                                {
+                                    candidate,
+                                    reason:
+                                        "backend-wrong-letter",
+                                    detail,
+                                    rejectedLetters: [
+                                        applied.evidence
+                                            .letter,
+                                    ],
+                                    maskBefore:
+                                        candidateMaskBefore,
+                                    maskAfter:
+                                        knowledge.mask,
+                                    wrongCountBefore:
+                                        candidateWrongCountBefore,
+                                    wrongCountAfter:
+                                        knowledge.wrongCount,
+                                },
                             );
 
                         this.activityLogger.hangmanRetryAfterWrongGuess(
-                            answer.word,
+                            candidate,
                             applied.evidence,
                             knowledge,
                         );
 
-                        // Do not waste more guesses on a candidate that has
-                        // already been disproved by ClassHero.
+                        /*
+                         * Do not spend any more attempts on a word hypothesis
+                         * that ClassHero has already disproved.
+                         */
                         break;
                     }
                 }
@@ -272,18 +447,31 @@ export class HangmanExecutor {
                 if (
                     !candidateProvenWrong
                 ) {
-                    // All new letters from the candidate were tried without a
-                    // loss, but the puzzle is still incomplete. The exact word
-                    // was therefore still not proven; ask for another hypothesis
-                    // using the newly-revealed mask.
+                    const detail =
+                        `A candidata '${candidate}' não concluiu a palavra mesmo após testar todas as suas letras novas. A máscara atual é '${knowledge.mask}'.`;
+
                     knowledge =
-                        rejectHangmanCandidate(
+                        recordHangmanCandidateFailure(
                             knowledge,
-                            answer.word,
+                            {
+                                candidate,
+                                reason:
+                                    "did-not-complete",
+                                detail,
+                                rejectedLetters: [],
+                                maskBefore:
+                                    candidateMaskBefore,
+                                maskAfter:
+                                    knowledge.mask,
+                                wrongCountBefore:
+                                    candidateWrongCountBefore,
+                                wrongCountAfter:
+                                    knowledge.wrongCount,
+                            },
                         );
 
                     this.activityLogger.hangmanCandidateExhausted(
-                        answer.word,
+                        candidate,
                         knowledge,
                     );
                 }
@@ -313,10 +501,18 @@ export class HangmanExecutor {
                             knowledge.attemptsLeft,
                         rejectedCandidates:
                             knowledge.rejectedCandidates,
+                        candidateFailures:
+                            knowledge.candidateFailures,
                     },
                 );
             }
 
+            /*
+             * Individual guesses are already paced, but this final guard is
+             * still necessary when the winning word has fewer unique letters
+             * than characters or AI/network processing consumed less than the
+             * configured minimum.
+             */
             const timing =
                 await this.timing.waitForGame({
                     targetId:
@@ -408,6 +604,8 @@ export class HangmanExecutor {
                         knowledge.wrongLetters,
                     rejectedCandidates:
                         knowledge.rejectedCandidates,
+                    candidateFailures:
+                        knowledge.candidateFailures,
                     score:
                         submitted.response.score,
                     xpAwarded:
@@ -462,7 +660,8 @@ function failed(
     details?: Readonly<Record<string, unknown>>,
 ): AutomationExecutionResult {
     return {
-        status: "failed",
+        status:
+            "failed",
         targetId:
             "hangman",
         strategy:

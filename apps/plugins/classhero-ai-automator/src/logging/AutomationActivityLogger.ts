@@ -273,16 +273,34 @@ export class AutomationActivityLogger {
         );
     }
 
-    /** Logs the word proposed by an AI provider for a hangman puzzle. */
+    /** Logs the word proposed by an AI provider and its outbound A-Z form. */
     hangmanAiAnswer(
         answer: string,
+        normalizedAnswer: string,
         providerName: string,
     ): void {
+        const changed =
+            answer
+                .trim()
+                .toLocaleUpperCase(
+                    "en-US",
+                ) !==
+            normalizedAnswer;
+
         this.logger.info(
-            `Resposta gerada pela IA para a forca: ${answer}`,
+            changed
+                ? [
+                    `Resposta gerada pela IA para a forca: ${answer}`,
+                    `Forma normalizada para envio A-Z: ${normalizedAnswer || "(inválida)"}`,
+                ].join("\n")
+                : `Resposta gerada pela IA para a forca: ${normalizedAnswer}`,
             {
-                provider: providerName,
+                provider:
+                    providerName,
                 answer,
+                normalizedAnswer,
+                normalized:
+                    changed,
             },
         );
     }
@@ -307,26 +325,125 @@ export class AutomationActivityLogger {
         knowledge: HangmanKnowledge,
         providerName: string,
     ): void {
+        const failures =
+            knowledge.candidateFailures.map(
+                (failure) =>
+                    `  • ${failure.candidate || "(inválida)"}: ${failure.detail}`,
+            );
+
         this.logger.info(
             [
                 `Análise da forca — rodada ${round}:`,
                 `- Máscara atual: ${knowledge.mask}`,
                 `- Letras confirmadas: ${formatList(knowledge.correctLetters)}`,
                 `- Letras erradas: ${formatList(knowledge.wrongLetters)}`,
+                `- Letras já enviadas: ${formatList(knowledge.guessedLetters)}`,
                 `- wrongCount: ${knowledge.wrongCount}`,
                 `- Tentativas restantes: ${knowledge.attemptsLeft}`,
-                `- Candidatas rejeitadas: ${formatList(knowledge.rejectedCandidates)}`,
+                `- Palavras já comprovadas incorretas: ${formatList(knowledge.rejectedCandidates)}`,
+                ...(failures.length === 0
+                    ? []
+                    : [
+                        "- Motivos das hipóteses anteriores:",
+                        ...failures,
+                    ]),
             ].join("\n"),
             {
-                provider: providerName,
+                provider:
+                    providerName,
                 round,
-                mask: knowledge.mask,
-                correctLetters: [...knowledge.correctLetters],
-                wrongLetters: [...knowledge.wrongLetters],
-                guessedLetters: [...knowledge.guessedLetters],
-                wrongCount: knowledge.wrongCount,
-                attemptsLeft: knowledge.attemptsLeft,
-                rejectedCandidates: [...knowledge.rejectedCandidates],
+                mask:
+                    knowledge.mask,
+                correctLetters: [
+                    ...knowledge.correctLetters,
+                ],
+                wrongLetters: [
+                    ...knowledge.wrongLetters,
+                ],
+                guessedLetters: [
+                    ...knowledge.guessedLetters,
+                ],
+                wrongCount:
+                    knowledge.wrongCount,
+                attemptsLeft:
+                    knowledge.attemptsLeft,
+                rejectedCandidates: [
+                    ...knowledge.rejectedCandidates,
+                ],
+                candidateFailures:
+                    knowledge.candidateFailures.map(
+                        (failure) => ({
+                            ...failure,
+                            rejectedLetters: [
+                                ...failure.rejectedLetters,
+                            ],
+                        }),
+                    ),
+            },
+        );
+    }
+
+    /** Logs the adaptive letter-by-letter pacing plan for one AI candidate. */
+    hangmanCandidatePacingPlanned(input: {
+        readonly candidate: string;
+        readonly mode: GameMode;
+        readonly enabled: boolean;
+        readonly gameMinimumSeconds: number;
+        readonly alreadySent: number;
+        readonly pendingLetters: readonly string[];
+        readonly plannedTotalGuesses: number;
+        readonly intervalSeconds: number;
+    }): void {
+        this.logger.info(
+            input.enabled
+                ? [
+                    `Pacing da candidata '${input.candidate}':`,
+                    `- Modo: ${input.mode}`,
+                    `- Tempo mínimo do jogo: ${formatSeconds(input.gameMinimumSeconds)}`,
+                    `- Letras já enviadas: ${input.alreadySent}`,
+                    `- Próximas letras A-Z: ${formatList(input.pendingLetters)}`,
+                    `- Estimativa atual de palpites: ${input.plannedTotalGuesses}`,
+                    `- Intervalo médio atual: ${formatSeconds(input.intervalSeconds)}`,
+                ].join("\n")
+                : `Pacing da candidata '${input.candidate}' está desativado.`,
+            {
+                candidate:
+                    input.candidate,
+                mode:
+                    input.mode,
+                enabled:
+                    input.enabled,
+                gameMinimumSeconds:
+                    input.gameMinimumSeconds,
+                alreadySent:
+                    input.alreadySent,
+                pendingLetters: [
+                    ...input.pendingLetters,
+                ],
+                plannedTotalGuesses:
+                    input.plannedTotalGuesses,
+                intervalSeconds:
+                    input.intervalSeconds,
+            },
+        );
+    }
+
+    /** Logs immediately before one A-Z letter is sent to `/forca/guess`. */
+    hangmanGuessValidationStarting(
+        letter: string,
+        candidate: string,
+        guessIndex: number,
+        plannedTotalGuesses: number,
+        checkpointSeconds: number,
+    ): void {
+        this.logger.info(
+            `Enviando letra '${letter}' da candidata '${candidate}' para validação no ClassHero em ~${formatSeconds(checkpointSeconds)} (${guessIndex}/${plannedTotalGuesses}).`,
+            {
+                letter,
+                candidate,
+                guessIndex,
+                plannedTotalGuesses,
+                checkpointSeconds,
             },
         );
     }
