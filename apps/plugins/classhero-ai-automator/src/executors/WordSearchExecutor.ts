@@ -2,6 +2,10 @@ import type {
     ClassHero,
     GameMode,
 } from "@classhero-cli/api-wrapper";
+import {
+    getSourceMissionMaterialId,
+    requireActivityTarget,
+} from "../context/ActivityTargets.js";
 import type {
     ActivityContext,
     AutomationExecutionResult,
@@ -10,14 +14,17 @@ import type {
     AutomationActivityLogger,
 } from "../logging/AutomationActivityLogger.js";
 import { WordSearchSolver } from "../solvers/WordSearchSolver.js";
-import {
-    getSourceMissionMaterialId,
-    requireActivityTarget,
-} from "../context/ActivityTargets.js";
-import type { ExecutionTimingPolicy } from "../timing/ExecutionTimingPolicy.js";
+import type {
+    ExecutionTimingPolicy,
+} from "../timing/ExecutionTimingPolicy.js";
 
 /**
- * Executes the complete deterministic ClassHero word-search workflow.
+ * Executes the deterministic ClassHero word-search workflow.
+ *
+ * The current observed API exposes `/start` and one final `/submit`, but no
+ * per-word validation endpoint. Therefore solved words are paced through local
+ * checkpoints and the complete `found_words` payload is sent at the final
+ * checkpoint only.
  */
 export class WordSearchExecutor {
     constructor(
@@ -27,25 +34,35 @@ export class WordSearchExecutor {
         private readonly solver = new WordSearchSolver(),
     ) {}
 
-    /** Creates, solves, logs, paces and submits one word-search round. */
+    /** Creates, solves, progressively reveals and submits one word-search. */
     async execute(
         context: ActivityContext,
         mode: GameMode,
     ): Promise<AutomationExecutionResult> {
         try {
-            const target = requireActivityTarget(context, "games");
-            const sourceMissionMaterialId = getSourceMissionMaterialId(context);
+            const target =
+                requireActivityTarget(
+                    context,
+                    "games",
+                );
 
-            const started = await this.api.games.wordSearch.start({
-                materialId: target.materialId,
-                mode,
-                ...(sourceMissionMaterialId === undefined
-                    ? {}
-                    : {
-                        themeMissionMaterialId:
-                            sourceMissionMaterialId,
-                    }),
-            });
+            const sourceMissionMaterialId =
+                getSourceMissionMaterialId(
+                    context,
+                );
+
+            const started =
+                await this.api.games.wordSearch.start({
+                    materialId:
+                        target.materialId,
+                    mode,
+                    ...(sourceMissionMaterialId === undefined
+                        ? {}
+                        : {
+                            themeMissionMaterialId:
+                                sourceMissionMaterialId,
+                        }),
+                });
 
             if (!started.ok) {
                 return failed(
@@ -53,11 +70,13 @@ export class WordSearchExecutor {
                 );
             }
 
-            const game = started.response;
+            const game =
+                started.response;
 
-            const markStarted = await this.api.games.wordSearch.markStarted(
-                game.game_id,
-            );
+            const markStarted =
+                await this.api.games.wordSearch.markStarted(
+                    game.game_id,
+                );
 
             if (!markStarted.ok) {
                 return failed(
@@ -65,20 +84,111 @@ export class WordSearchExecutor {
                 );
             }
 
-            // Timing starts only after the backend has accepted /start.
-            const timingStartedAt = Date.now();
+            const timingStartedAt =
+                Date.now();
 
             this.activityLogger.wordSearchStarted(
                 game,
                 mode,
             );
 
-            const solution = this.solver.solve(game);
+            const solution =
+                this.solver.solve(
+                    game,
+                );
 
-            for (const foundWord of solution.foundWords) {
-                const keyword = game.key_words[
-                    foundWord.wordIndex
-                ];
+            for (
+                const unresolved of
+                    solution.unresolved
+            ) {
+                this.activityLogger.wordSearchUnresolved(
+                    unresolved,
+                );
+            }
+
+            if (
+                solution.unresolved.length > 0 ||
+                solution.foundWords.length === 0
+            ) {
+                return failed(
+                    "O solver não encontrou todas as palavras; a rodada não foi enviada para evitar pontuação incorreta.",
+                    {
+                        unresolved:
+                            solution.unresolved.map(
+                                (item) =>
+                                    item.word,
+                            ),
+                    },
+                );
+            }
+
+            const schedule =
+                await this.timing.getGameProgressSchedule({
+                    targetId:
+                        "word-search",
+                    mode,
+                    totalUnits:
+                        solution.foundWords.length,
+                });
+
+            this.activityLogger.miniGamePacingPlanned({
+                game:
+                    "Caça-palavras",
+                mode,
+                enabled:
+                    schedule.enabled,
+                totalSeconds:
+                    schedule.gameMinimumSeconds,
+                totalUnits:
+                    schedule.totalUnits,
+                intervalSeconds:
+                    schedule.intervalSeconds,
+                unitLabel:
+                    "palavra",
+            });
+
+            let totalWaitedSeconds = 0;
+
+            /*
+             * There is intentionally no partial /submit here. The captured
+             * ClassHero API only shows the final submit operation for the
+             * complete word-search result.
+             */
+            for (
+                let index = 0;
+                index <
+                    solution.foundWords.length;
+                index++
+            ) {
+                const foundWord =
+                    solution.foundWords[
+                        index
+                    ];
+
+                if (!foundWord) {
+                    continue;
+                }
+
+                const checkpoint =
+                    await this.timing.waitForGameProgress({
+                        targetId:
+                            "word-search",
+                        mode,
+                        startedAt:
+                            timingStartedAt,
+                        completedUnits:
+                            index + 1,
+                        totalUnits:
+                            solution.foundWords.length,
+                    });
+
+                totalWaitedSeconds +=
+                    checkpoint.waitedSeconds;
+
+                const keyword =
+                    game.key_words[
+                        foundWord.wordIndex
+                    ];
 
                 if (keyword) {
                     this.activityLogger.wordSearchFound(
@@ -88,37 +198,21 @@ export class WordSearchExecutor {
                 }
             }
 
-            for (const unresolved of solution.unresolved) {
-                this.activityLogger.wordSearchUnresolved(
-                    unresolved,
-                );
-            }
-
-            if (solution.unresolved.length > 0) {
-                return failed(
-                    "O solver não encontrou todas as palavras; a rodada não foi enviada para evitar pontuação incorreta.",
-                    {
-                        unresolved: solution.unresolved.map(
-                            (item) => item.word,
-                        ),
-                    },
-                );
-            }
-
-            const timing = await this.timing.waitForGame({
-                targetId: "word-search",
-                mode,
-                startedAt: timingStartedAt,
-            });
-
-            const submitted = await this.api.games.wordSearch.submit({
-                game_id: game.game_id,
-                found_words: [...solution.foundWords],
-                mode,
-                hints_used: 0,
-                content_id: game.content_id,
-                material_id: target.materialId,
-            });
+            const submitted =
+                await this.api.games.wordSearch.submit({
+                    game_id:
+                        game.game_id,
+                    found_words: [
+                        ...solution.foundWords,
+                    ],
+                    mode,
+                    hints_used:
+                        0,
+                    content_id:
+                        game.content_id,
+                    material_id:
+                        target.materialId,
+                });
 
             if (!submitted.ok) {
                 return failed(
@@ -127,20 +221,38 @@ export class WordSearchExecutor {
             }
 
             return {
-                status: "completed",
-                targetId: "word-search",
-                strategy: "native",
-                message: submitted.response.message || "Caça-palavras concluído.",
+                status:
+                    "completed",
+                targetId:
+                    "word-search",
+                strategy:
+                    "native",
+                message:
+                    submitted.response.message ||
+                    "Caça-palavras concluído.",
                 details: {
-                    wordsFound: submitted.response.found_correct,
-                    totalWords: submitted.response.total_words,
-                    score: submitted.response.score,
-                    xpAwarded: submitted.response.xp_awarded,
-                    alreadyRewarded: submitted.response.already_rewarded,
-                    timingEnabled: timing.enabled,
-                    minimumSeconds: timing.minimumSeconds,
-                    waitedSeconds: timing.waitedSeconds,
-                    totalElapsedSeconds: timing.totalElapsedSeconds,
+                    wordsFound:
+                        submitted.response.found_correct,
+                    totalWords:
+                        submitted.response.total_words,
+                    score:
+                        submitted.response.score,
+                    xpAwarded:
+                        submitted.response.xp_awarded,
+                    alreadyRewarded:
+                        submitted.response.already_rewarded,
+                    timingEnabled:
+                        schedule.enabled,
+                    minimumSeconds:
+                        schedule.gameMinimumSeconds,
+                    checkpointIntervalSeconds:
+                        schedule.intervalSeconds,
+                    waitedSeconds:
+                        roundSeconds(
+                            totalWaitedSeconds,
+                        ),
+                    totalElapsedSeconds:
+                        submitted.response.time_seconds,
                 },
             };
         } catch (error) {
@@ -153,15 +265,28 @@ export class WordSearchExecutor {
     }
 }
 
+function roundSeconds(
+    seconds: number,
+): number {
+    return Math.round(
+        seconds * 100,
+    ) / 100;
+}
+
 function failed(
     message: string,
     details?: Readonly<Record<string, unknown>>,
 ): AutomationExecutionResult {
     return {
-        status: "failed",
-        targetId: "word-search",
-        strategy: "native",
+        status:
+            "failed",
+        targetId:
+            "word-search",
+        strategy:
+            "native",
         message,
-        ...(details === undefined ? {} : { details }),
+        ...(details === undefined
+            ? {}
+            : { details }),
     };
 }

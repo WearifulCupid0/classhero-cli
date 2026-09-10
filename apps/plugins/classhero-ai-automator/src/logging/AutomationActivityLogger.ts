@@ -45,6 +45,40 @@ export class AutomationActivityLogger {
     constructor(private readonly logger: PluginLogger) {}
 
     /**
+     * Logs the evenly distributed progress plan used by deterministic
+     * mini-games.
+     */
+    miniGamePacingPlanned(input: {
+        readonly game: string;
+        readonly mode: GameMode;
+        readonly enabled: boolean;
+        readonly totalSeconds: number;
+        readonly totalUnits: number;
+        readonly intervalSeconds: number;
+        readonly unitLabel: string;
+    }): void {
+        this.logger.info(
+            input.enabled
+                ? [
+                    `Pacing progressivo de ${input.game}:`,
+                    `- Modo: ${input.mode}`,
+                    `- Tempo total mínimo: ${formatSeconds(input.totalSeconds)}`,
+                    `- Quantidade de ${pluralize(input.unitLabel, input.totalUnits)}: ${input.totalUnits}`,
+                    `- Intervalo médio: ${formatSeconds(input.intervalSeconds)}`,
+                ].join("\\n")
+                : `Pacing progressivo de ${input.game} está desativado.`,
+            {
+                game: input.game,
+                mode: input.mode,
+                enabled: input.enabled,
+                totalSeconds: input.totalSeconds,
+                totalUnits: input.totalUnits,
+                intervalSeconds: input.intervalSeconds,
+            },
+        );
+    }
+
+    /**
      * Logs every clue/keyword before the word-search solver starts.
      *
      * `hint` is treated as the question/clue associated with the expected
@@ -175,6 +209,25 @@ export class AutomationActivityLogger {
             {
                 word: pair.word,
                 definition: pair.definition,
+            },
+        );
+    }
+
+    /** Logs the moment one solved pair is actually sent for backend validation. */
+    memoryPairValidationStarting(
+        pair: MemoryPair,
+        index: number,
+        total: number,
+        checkpointSeconds: number,
+    ): void {
+        this.logger.info(
+            `Enviando par ${index}/${total} para validação no ClassHero em ~${formatSeconds(checkpointSeconds)}: '${pair.word}' ↔ '${pair.definition}'.`,
+            {
+                word: pair.word,
+                definition: pair.definition,
+                index,
+                total,
+                checkpointSeconds,
             },
         );
     }
@@ -761,6 +814,34 @@ export class AutomationActivityLogger {
         );
     }
 
+}
+
+function formatSeconds(
+    seconds: number,
+): string {
+    const rounded =
+        Math.round(seconds * 100) /
+        100;
+
+    return `${rounded}s`;
+}
+
+function pluralize(
+    value: string,
+    amount: number,
+): string {
+    if (amount === 1) {
+        return value;
+    }
+
+    switch (value) {
+        case "par":
+            return "pares";
+        case "palavra":
+            return "palavras";
+        default:
+            return `${value}s`;
+    }
 }
 
 function formatList(
