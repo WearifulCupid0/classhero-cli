@@ -1,6 +1,6 @@
 {
   "name": "@classhero-cli/plugin-api",
-  "version": "2.2.0",
+  "version": "2.1.0",
   "description": "Typed plugin SDK and runtime primitives for classhero-cli.",
   "type": "module",
   "main": "./dist/index.js",
