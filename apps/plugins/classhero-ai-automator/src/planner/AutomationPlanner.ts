@@ -40,10 +40,10 @@ const QUIZ: AutomationTarget = {
 
 const INTERACTIVE_PATH: AutomationTarget = {
     id: "interactive-path",
-    label: "Caminho interativo",
-    description: "Passos sem resposta determinística são delegados a um AI Provider.",
+    label: "Trilha",
+    description: "Confirma passos teóricos automaticamente e usa um AI Provider apenas nos quick_quiz.",
     strategy: "ai",
-    executable: false,
+    executable: true,
 };
 
 const CODE: AutomationTarget = {
@@ -204,7 +204,7 @@ function reasonFor(
         case "quiz":
             return "A atividade possui quiz com diferentes formatos de pergunta e validação por questão.";
         case "interactive-path":
-            return "O caminho possui passos heterogêneos e respostas dependentes de contexto.";
+            return "A Trilha possui passos tabelados: teoria/checkpoint são determinísticos e quick_quiz usa IA.";
         case "code":
             return "A atividade exige interpretação ou geração de código.";
         case "discursive":

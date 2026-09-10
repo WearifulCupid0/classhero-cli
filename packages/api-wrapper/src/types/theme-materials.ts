@@ -182,7 +182,13 @@ export interface ThemeMaterial extends UnknownRecord {
     gamified_interactive_path_total_xp?: number;
     gamified_interactive_path_possible_xp?: number;
     gamified_interactive_path_finished?: boolean;
-    gamified_interactive_path_level_xp_map?: Record<string, number>;
+    gamified_interactive_path_level_xp_map?: Record<
+        string,
+        {
+            xp_earned: number;
+            xp_possible: number;
+        }
+    >;
     code_challenge_gamified_levels?: string[];
     code_challenge_gamified_enabled_levels?: string[];
     code_challenge_gamified_finished_levels?: string[];
@@ -287,31 +293,62 @@ export interface CodeChallengeFeedbackInput {
 export interface StartGamifiedInteractivePathInput {
     level_key: string;
     material_id: string;
-    mode: string;
+    /** The captured student flow uses `"attempt"`. */
+    mode: "attempt" | (string & {});
+}
+
+/** Step types confirmed in the complete interactive-path HAR. */
+export type GamifiedInteractivePathStepType =
+    | "theory_card"
+    | "quick_quiz"
+    | "checkpoint"
+    | (string & {});
+
+/** One selectable option inside a `quick_quiz` path step. */
+export interface GamifiedInteractivePathOption extends UnknownRecord {
+    id: string;
+    label: string;
+    value: string;
+}
+
+/** One hint configured for an interactive path step. */
+export interface GamifiedInteractivePathHint extends UnknownRecord {
+    id: string;
+    text: string;
+    cost_xp?: number;
+    position?: number;
+}
+
+/** Flexible payload whose known fields depend on `step_type`. */
+export interface GamifiedInteractivePathStepPayload extends UnknownRecord {
+    /** `theory_card` instruction text. */
+    instructions?: string;
+    /** `quick_quiz` answer options. */
+    options?: GamifiedInteractivePathOption[];
 }
 
 /** One step in a gamified interactive path. */
 export interface GamifiedInteractivePathStep extends UnknownRecord {
-    hints: unknown[];
+    hints: GamifiedInteractivePathHint[];
     title: string;
     prompt: string;
     path_id: string;
-    payload: UnknownRecord;
+    payload: GamifiedInteractivePathStepPayload;
     step_id: string;
     position: number;
-    step_type: string;
+    step_type: GamifiedInteractivePathStepType;
     xp_reward: number;
     answer_key: unknown | null;
     created_at: string;
     updated_at: string;
     is_checkpoint: boolean;
     penalty_on_error: number;
-    flashcard_back_text: StringNullable;
-    flashcard_front_text: StringNullable;
-    flashcard_code_snippet: StringNullable;
+    flashcard_back_text?: StringNullable;
+    flashcard_front_text?: StringNullable;
+    flashcard_code_snippet?: StringNullable;
 }
 
-/** Gamified interactive path definition. */
+/** Gamified interactive path definition returned when an attempt starts/resumes. */
 export interface GamifiedInteractivePath extends UnknownRecord {
     path_id: string;
     material_id: string;
@@ -320,7 +357,13 @@ export interface GamifiedInteractivePath extends UnknownRecord {
     version: number;
     status: string;
     estimated_minutes: number;
-    settings: UnknownRecord;
+    settings: {
+        allow_hints?: boolean;
+        replay_xp_factor?: number;
+        max_retry_full_xp?: number;
+        completion_bonus_xp?: number;
+        [key: string]: unknown;
+    };
     summary: {
         title: string;
         description: string;
@@ -360,6 +403,18 @@ export interface GamifiedInteractivePathAttempt extends UnknownRecord {
     updated_at: string;
 }
 
+/** One previously resolved step returned when an attempt is resumed. */
+export interface GamifiedInteractivePathStepAttempt extends UnknownRecord {
+    step_id: string;
+    status: string;
+    xp_awarded: number;
+    hints_used: number;
+    answered_at: string;
+    answer_payload: UnknownRecord;
+    correct_answer_display: StringNullable;
+    correct_order_values: unknown[];
+}
+
 /** Response returned when a gamified path attempt starts or resumes. */
 export interface StartGamifiedInteractivePathResponse extends UnknownRecord {
     review_mode: boolean;
@@ -367,7 +422,7 @@ export interface StartGamifiedInteractivePathResponse extends UnknownRecord {
     attempt: GamifiedInteractivePathAttempt;
     path: GamifiedInteractivePath;
     path_xp_possible: number;
-    step_attempts: UnknownRecord[];
+    step_attempts: GamifiedInteractivePathStepAttempt[];
 }
 
 /** Payload submitted for one gamified interactive path step. */
@@ -387,15 +442,36 @@ export interface SubmitGamifiedInteractivePathStepResponse extends UnknownRecord
     total_xp_awarded: number;
     resolved_steps: number;
     wrong_steps: number;
-    correct_answer_display: string;
+    correct_answer_display: StringNullable;
     correct_order_values: unknown[];
     completed_lesson: boolean;
-    next_step_position: number;
+    next_step_position: number | null;
 }
 
 /** Pedagogical-credit balance attached to an interactive path attempt. */
 export interface InteractivePathCreditBalance extends UnknownRecord {
     available_credits: number;
+}
+
+/** Response returned after revealing one path-step hint. */
+export interface RevealGamifiedInteractivePathHintResponse extends UnknownRecord {
+    hint: GamifiedInteractivePathHint;
+    cost: number;
+    balance: InteractivePathCreditBalance;
+    hints_revealed: number;
+    hints_total: number;
+}
+
+/** Finalized attempt returned by `/attempts/:attemptId/complete`. */
+export interface CompleteGamifiedInteractivePathResponse
+    extends GamifiedInteractivePathAttempt {
+    replay_factor_applied: number;
+    attempt_multiplier_applied: number;
+    step_xp_before_scaling: number;
+    step_xp_after_scaling: number;
+    completion_bonus: number;
+    xp_possible: number;
+    already_completed: boolean;
 }
 
 /** Common response type for feedback endpoints. */

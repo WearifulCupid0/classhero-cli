@@ -18,6 +18,10 @@ import {
 import type {
     AIProvider,
 } from "../providers/contracts.js";
+import {
+    getSourceMissionMaterialId,
+    requireActivityTarget,
+} from "../context/ActivityTargets.js";
 import type {
     ExecutionTimingPolicy,
 } from "../timing/ExecutionTimingPolicy.js";
@@ -57,16 +61,19 @@ export class HangmanExecutor {
         provider: AIProvider,
     ): Promise<AutomationExecutionResult> {
         try {
+            const target = requireActivityTarget(context, "games");
+            const sourceMissionMaterialId = getSourceMissionMaterialId(context);
+
             const response =
                 await this.api.games.hangman.puzzle({
                     materialId:
-                        context.materialId,
+                        target.materialId,
                     mode,
-                    ...(context.themeMissionMaterialId === undefined
+                    ...(sourceMissionMaterialId === undefined
                         ? {}
                         : {
                             themeMissionMaterialId:
-                                context.themeMissionMaterialId,
+                                sourceMissionMaterialId,
                         }),
                 });
 
@@ -336,7 +343,7 @@ export class HangmanExecutor {
                     attempts:
                         backendState.wrongCount,
                     materialId:
-                        context.materialId,
+                        target.materialId,
                     missionId:
                         context.themeId,
                     context:

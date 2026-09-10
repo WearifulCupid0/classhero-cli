@@ -8,6 +8,10 @@ import type {
     ActivityContext,
     AutomationExecutionResult,
 } from "../contracts/activity.js";
+import {
+    getSourceMissionMaterialId,
+    requireActivityTarget,
+} from "../context/ActivityTargets.js";
 import type {
     AutomationActivityLogger,
 } from "../logging/AutomationActivityLogger.js";
@@ -438,9 +442,12 @@ export class QuizExecutor {
                 AutomationExecutionResult;
         }
     > {
+        const quizTarget =
+            requireActivityTarget(context, "quiz");
+
         const active =
             await this.api.quizzes.activeAttempt(
-                context.materialId,
+                quizTarget.materialId,
                 {
                     all_available:
                         true,
@@ -479,7 +486,7 @@ export class QuizExecutor {
 
         const sourceId =
             options.themeMissionMaterialId ??
-            context.themeMissionMaterialId;
+            getSourceMissionMaterialId(context);
 
         if (!sourceId) {
             return {
@@ -499,7 +506,7 @@ export class QuizExecutor {
         const started =
             await this.api.quizzes.startAttempt({
                 material_id:
-                    context.materialId,
+                    quizTarget.materialId,
                 theme_id:
                     context.themeId,
                 theme_mission_material_id:

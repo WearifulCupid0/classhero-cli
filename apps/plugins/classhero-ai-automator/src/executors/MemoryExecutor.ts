@@ -10,6 +10,10 @@ import type {
     AutomationActivityLogger,
 } from "../logging/AutomationActivityLogger.js";
 import { MemorySolver } from "../solvers/MemorySolver.js";
+import {
+    getSourceMissionMaterialId,
+    requireActivityTarget,
+} from "../context/ActivityTargets.js";
 import type { ExecutionTimingPolicy } from "../timing/ExecutionTimingPolicy.js";
 
 /**
@@ -32,14 +36,17 @@ export class MemoryExecutor {
         mode: GameMode,
     ): Promise<AutomationExecutionResult> {
         try {
+            const target = requireActivityTarget(context, "games");
+            const sourceMissionMaterialId = getSourceMissionMaterialId(context);
+
             const started = await this.api.games.memory.start({
-                materialId: context.materialId,
+                materialId: target.materialId,
                 mode,
-                ...(context.themeMissionMaterialId === undefined
+                ...(sourceMissionMaterialId === undefined
                     ? {}
                     : {
                         themeMissionMaterialId:
-                            context.themeMissionMaterialId,
+                            sourceMissionMaterialId,
                     }),
             });
 
@@ -147,7 +154,7 @@ export class MemoryExecutor {
                 mode,
                 time_seconds: elapsedSeconds,
                 theme_id: context.themeId,
-                material_id: context.materialId,
+                material_id: target.materialId,
                 context: "material",
                 content_id: game.content_id,
             });

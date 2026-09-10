@@ -3,11 +3,13 @@ import type {
     AdaptiveBrainMarkdownAvailability,
     BrainMarkdown,
     CodeChallengeFeedbackInput,
+    CompleteGamifiedInteractivePathResponse,
     CreateMaterialAccessSessionInput,
     CreateMaterialAccessSessionResponse,
     GenericMessage,
     InteractivePathCreditBalance,
     MissionMaterial,
+    RevealGamifiedInteractivePathHintResponse,
     StartGamifiedInteractivePathInput,
     StartGamifiedInteractivePathResponse,
     SubmitGamifiedInteractivePathStepInput,
@@ -99,6 +101,28 @@ export class ThemeMaterials extends Api {
     gamifiedInteractivePathCreditBalance(attemptId: string) {
         return this.request<InteractivePathCreditBalance>(
             `/theme-materials/gamified-interactive-path/attempts/${encodeURIComponent(attemptId)}/credits/balance`,
+        );
+    }
+
+
+    /** Reveals the next configured hint for one interactive-path step. */
+    revealGamifiedInteractivePathHint(
+        attemptId: string,
+        stepId: string,
+    ) {
+        return this.request<RevealGamifiedInteractivePathHintResponse>(
+            `/theme-materials/gamified-interactive-path/attempts/${encodeURIComponent(attemptId)}/steps/${encodeURIComponent(stepId)}/hint/reveal`,
+            { method: "POST" },
+        );
+    }
+
+    /** Finalizes an interactive-path attempt after the lesson is complete. */
+    completeGamifiedInteractivePathAttempt(
+        attemptId: string,
+    ) {
+        return this.request<CompleteGamifiedInteractivePathResponse>(
+            `/theme-materials/gamified-interactive-path/attempts/${encodeURIComponent(attemptId)}/complete`,
+            { method: "POST" },
         );
     }
 

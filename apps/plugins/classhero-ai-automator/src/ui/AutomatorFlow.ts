@@ -8,6 +8,10 @@ import {
     type PluginContext,
 } from "@classhero-cli/plugin-api";
 import { ActivityContextFactory } from "../context/ActivityContextFactory.js";
+import {
+    getActivityTarget,
+    getSourceMissionMaterialId,
+} from "../context/ActivityTargets.js";
 import type {
     ActivityContext,
     AutomationPlan,
@@ -155,6 +159,24 @@ export class AutomatorFlow {
             };
         }
 
+        if (
+            target.id === "interactive-path"
+        ) {
+            const level =
+                await this.selectInteractivePathLevel(
+                    activity,
+                );
+
+            if (!level) {
+                return;
+            }
+
+            options = {
+                ...options,
+                interactivePathLevel: level,
+            };
+        }
+
         const confirmed =
             await this.context.prompts.run({
                 id: "classhero-ai-automator.confirm",
@@ -254,9 +276,22 @@ export class AutomatorFlow {
     private async selectQuizOptions(
         activity: ActivityContext,
     ): Promise<ExecuteAutomationOptions | undefined> {
+        const quizTarget =
+            getActivityTarget(
+                activity,
+                "quiz",
+            );
+
+        if (!quizTarget) {
+            this.context.logger.warn(
+                "A atividade não possui um target de quiz.",
+            );
+            return undefined;
+        }
+
         const active =
             await this.context.api.quizzes.activeAttempt(
-                activity.materialId,
+                quizTarget.materialId,
                 {
                     all_available:
                         true,
@@ -326,7 +361,9 @@ export class AutomatorFlow {
         }
 
         const source =
-            activity.themeMissionMaterialId ??
+            getSourceMissionMaterialId(
+                activity,
+            ) ??
             await this.selectQuizSource(
                 activity,
             );
@@ -564,6 +601,76 @@ export class AutomatorFlow {
         return result.value;
     }
 
+
+    /** Selects one enabled level for a ClassHero Trilha; quantity is path-owned. */
+    private async selectInteractivePathLevel(
+        activity: ActivityContext,
+    ): Promise<string | undefined> {
+        const target =
+            getActivityTarget(
+                activity,
+                "interactive-path",
+            );
+
+        if (!target) {
+            this.context.logger.warn(
+                "A atividade não possui um target de Trilha.",
+            );
+            return undefined;
+        }
+
+        const material =
+            target.activity;
+
+        const levels =
+            uniqueStrings([
+                ...(material.gamified_interactive_path_enabled_levels ?? []),
+                ...(material.gamified_interactive_path_active_levels ?? []),
+                ...(material.gamified_interactive_path_levels ?? []),
+            ]);
+
+        if (levels.length === 0) {
+            return "basic";
+        }
+
+        if (levels.length === 1) {
+            return levels[0];
+        }
+
+        const result =
+            await this.context.prompts.run<string>({
+                id: "classhero-ai-automator.interactive-path-level",
+                kind: "select",
+                message: "Nível da Trilha",
+                options:
+                    levels.map(
+                        (level) => ({
+                            id: `classhero-ai-automator.interactive-path-level.${level}`,
+                            value: level,
+                            label: quizLevelLabel(
+                                level,
+                            ),
+                        }),
+                    ),
+                /*
+                 * `levels.length > 1` was checked above, but with
+                 * noUncheckedIndexedAccess TypeScript still types levels[0]
+                 * as `string | undefined`. The non-null assertion is safe
+                 * here because the empty and single-item cases already
+                 * returned before this prompt is created.
+                 */
+                initialValue:
+                    levels.includes("basic")
+                        ? "basic"
+                        : levels[0]!,
+            });
+
+        return result.status ===
+            "submitted"
+            ? result.value
+            : undefined;
+    }
+
     private logAutomaticQuizSource(
         material: MissionMaterial,
     ): void {
@@ -623,6 +730,19 @@ export class AutomatorFlow {
             },
         );
     }
+}
+
+
+function uniqueStrings(
+    values: readonly string[],
+): string[] {
+    return [
+        ...new Set(
+            values
+                .map((value) => value.trim())
+                .filter(Boolean),
+        ),
+    ];
 }
 
 function quizLevelLabel(

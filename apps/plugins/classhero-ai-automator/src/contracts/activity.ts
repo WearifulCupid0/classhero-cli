@@ -3,12 +3,6 @@ import type {
     ThemeMaterial,
 } from "@classhero-cli/api-wrapper";
 
-/**
- * Primary material family derived from the ClassHero `type` field.
- *
- * `kind` remains singular for backwards compatibility, while
- * `ActivityContext.capabilities` can contain several simultaneously.
- */
 export type ActivityKind =
     | "games"
     | "quiz"
@@ -17,23 +11,9 @@ export type ActivityKind =
     | "discursive"
     | "unknown";
 
-/** Independently automatable feature exposed by one selected activity. */
-export type ActivityCapability =
-    | "games"
-    | "quiz"
-    | "interactive-path"
-    | "code"
-    | "discursive";
-
-/** Execution mechanism selected for one automation target. */
+export type ActivityCapability = Exclude<ActivityKind, "unknown">;
 export type AutomationStrategy = "native" | "ai";
 
-/**
- * Concrete action that the automator can reason about.
- *
- * `word-search` and `memory` are deterministic. The remaining targets require
- * semantic interpretation and therefore belong to the AI strategy.
- */
 export type AutomationTargetId =
     | "word-search"
     | "memory"
@@ -43,21 +23,33 @@ export type AutomationTargetId =
     | "code"
     | "discursive";
 
-/** Normalized immutable activity context consumed by planners and executors. */
+/** One concrete ThemeMaterial backing one executable capability. */
+export interface ActivityTargetContext {
+    readonly capability: ActivityCapability;
+    readonly materialId: string;
+    readonly materialType: string;
+    readonly title: string;
+    readonly activity: ThemeMaterial;
+}
+
+/**
+ * Normalized logical activity consumed by the automator.
+ *
+ * `targets` is the source of truth. Compatibility fields (`materialId`,
+ * `materialType`, `kind`, `activity`) point to the primary target so older
+ * plugin code keeps working.
+ */
 export interface ActivityContext {
     readonly materialId: string;
     readonly themeId: string;
     readonly themeMissionMaterialId?: string;
+    readonly sourceMissionMaterialId?: string;
+    readonly sourceTitle?: string;
     readonly title: string;
     readonly materialType: string;
-    /** Primary normalized family derived from `materialType`. */
     readonly kind: ActivityKind;
-    /**
-     * All automatable features detected for the material.
-     *
-     * One ClassHero activity can expose both games and quiz behavior.
-     */
     readonly capabilities: readonly ActivityCapability[];
+    readonly targets: readonly ActivityTargetContext[];
     readonly disciplineId?: string;
     readonly disciplineName?: string;
     readonly missionId?: string;

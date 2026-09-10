@@ -58,7 +58,7 @@ export class TimingSettingsFlow {
                     {
                         id: "classhero-ai-automator.settings.quiz",
                         value: "quiz",
-                        label: "Tempo por pergunta do quiz",
+                        label: "Tempo por pergunta (quiz e trilha)",
                         hint: `${config.quiz.secondsPerQuestion}s por pergunta`,
                     },
                     {
@@ -233,7 +233,7 @@ export class TimingSettingsFlow {
     ): Promise<void> {
         const seconds = await this.askSeconds(
             "classhero-ai-automator.settings.quiz.seconds-per-question",
-            "Tempo mínimo por pergunta do quiz (segundos)",
+            "Tempo mínimo por pergunta de quiz/trilha (segundos)",
             config.quiz.secondsPerQuestion,
             600,
         );
@@ -245,7 +245,7 @@ export class TimingSettingsFlow {
         await this.store.setQuizSecondsPerQuestion(seconds);
 
         this.context.logger.info(
-            "Tempo por pergunta do quiz atualizado.",
+            "Tempo por pergunta de quiz/trilha atualizado.",
             {
                 secondsPerQuestion: seconds,
             },

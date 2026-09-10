@@ -8,6 +8,7 @@ import type {
     HangmanGuessEvidence,
     HangmanKnowledge,
 } from "../executors/HangmanKnowledge.js";
+import { getActivityTarget } from "../context/ActivityTargets.js";
 import type {
     AIProviderRequest,
 } from "../providers/contracts.js";
@@ -178,6 +179,7 @@ function buildMaterialContext(
     context: ActivityContext,
 ): Readonly<Record<string, unknown>> {
     const activity =
+        getActivityTarget(context, "games")?.activity ??
         context.activity;
 
     return {

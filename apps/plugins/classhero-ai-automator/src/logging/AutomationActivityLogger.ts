@@ -1,5 +1,11 @@
 import type {
+    CompleteGamifiedInteractivePathResponse,
     GameMode,
+    GamifiedInteractivePath,
+    GamifiedInteractivePathAttempt,
+    GamifiedInteractivePathOption,
+    GamifiedInteractivePathStep,
+    SubmitGamifiedInteractivePathStepResponse,
     HangmanGuessResponse,
     HangmanPuzzle,
     HangmanSubmitResponse,
@@ -601,6 +607,160 @@ export class AutomationActivityLogger {
             },
         );
     }
+    /** Logs metadata for a new or resumed ClassHero Trilha. */
+    interactivePathStarted(
+        path: GamifiedInteractivePath,
+        attempt: GamifiedInteractivePathAttempt,
+        providerName: string | undefined,
+        resumed: boolean,
+    ): void {
+        this.logger.info(
+            [
+                resumed ? "Continuando Trilha existente." : "Iniciando Trilha.",
+                `- Título: ${path.summary.title}`,
+                `- Nível: ${path.level_key}`,
+                `- Passos: ${path.steps.length}`,
+                `- Provider: ${providerName ?? "não necessário até aparecer um quick_quiz"}`,
+            ].join("\\n"),
+            {
+                attemptId: attempt.attempt_id,
+                pathId: path.path_id,
+                level: path.level_key,
+                totalSteps: path.steps.length,
+                provider: providerName,
+                resumed,
+            },
+        );
+    }
+
+    /** Logs a step already present in the resumed attempt's step history. */
+    interactivePathStepSkipped(
+        step: GamifiedInteractivePathStep,
+        index: number,
+        total: number,
+    ): void {
+        this.logger.info(
+            `Passo ${index}/${total} já resolvido; ignorando '${step.title}'.`,
+            { stepId: step.step_id, stepType: step.step_type, index, total },
+        );
+    }
+
+    /** Logs deterministic theory/checkpoint acknowledgement. */
+    interactivePathAcknowledgement(
+        step: GamifiedInteractivePathStep,
+        index: number,
+        total: number,
+    ): void {
+        this.logger.info(
+            [
+                `Passo ${index}/${total} da Trilha: ${step.title}`,
+                `- Tipo: ${step.step_type}`,
+                step.prompt ? `- Conteúdo: ${step.prompt}` : "- Sem pergunta; enviando confirmação de leitura/progresso.",
+            ].join("\\n"),
+            { stepId: step.step_id, stepType: step.step_type, index, total },
+        );
+    }
+
+    /** Logs one `quick_quiz` question and every selectable option. */
+    interactivePathQuestion(
+        step: GamifiedInteractivePathStep,
+        index: number,
+        total: number,
+    ): void {
+        const options = step.payload.options ?? [];
+        this.logger.info(
+            [
+                `Pergunta da Trilha ${index}/${total}: ${step.title}`,
+                step.prompt,
+                "",
+                "Alternativas:",
+                ...options.map((option) => `- ${option.id}: ${option.label}`),
+            ].join("\\n"),
+            { stepId: step.step_id, stepType: step.step_type, index, total },
+        );
+    }
+
+    /** Logs the provider answer before the typed path-step submission. */
+    interactivePathAiAnswer(
+        step: GamifiedInteractivePathStep,
+        option: GamifiedInteractivePathOption,
+        providerName: string,
+        index: number,
+        total: number,
+    ): void {
+        this.logger.info(
+            [
+                `Resposta gerada pela IA para a Trilha ${index}/${total}:`,
+                `${option.id}: ${option.label}`,
+            ].join("\\n"),
+            {
+                stepId: step.step_id,
+                provider: providerName,
+                selectedOptionId: option.id,
+                selectedValue: option.value,
+                index,
+                total,
+            },
+        );
+    }
+
+    /** Logs ClassHero's authoritative result for one Trilha step. */
+    interactivePathStepResult(
+        step: GamifiedInteractivePathStep,
+        result: SubmitGamifiedInteractivePathStepResponse,
+        index: number,
+        total: number,
+        timingSeconds?: number,
+    ): void {
+        this.logger.info(
+            [
+                `Passo ${index}/${total} da Trilha validado pelo ClassHero.`,
+                `- Tipo: ${step.step_type}`,
+                `- Status: ${result.status}`,
+                `- XP: ${result.xp_awarded}`,
+                `- XP acumulado: ${result.total_xp_awarded}`,
+                ...(timingSeconds === undefined ? [] : [`- Tempo: ${timingSeconds}s`]),
+            ].join("\\n"),
+            {
+                stepId: step.step_id,
+                stepType: step.step_type,
+                status: result.status,
+                xpAwarded: result.xp_awarded,
+                totalXpAwarded: result.total_xp_awarded,
+                wrongSteps: result.wrong_steps,
+                completedLesson: result.completed_lesson,
+                timingSeconds,
+                index,
+                total,
+            },
+        );
+    }
+
+    /** Logs final Trilha scaling/bonus information returned by ClassHero. */
+    interactivePathFinished(
+        result: CompleteGamifiedInteractivePathResponse,
+    ): void {
+        this.logger.info(
+            [
+                "Trilha finalizada:",
+                `- Passos corretos: ${result.correct_steps}/${result.total_steps}`,
+                `- Passos errados: ${result.wrong_steps}`,
+                `- XP total: ${result.total_xp_awarded}`,
+                `- Bônus de conclusão: ${result.completion_bonus}`,
+            ].join("\\n"),
+            {
+                attemptId: result.attempt_id,
+                level: result.level_key,
+                correctSteps: result.correct_steps,
+                wrongSteps: result.wrong_steps,
+                totalXpAwarded: result.total_xp_awarded,
+                completionBonus: result.completion_bonus,
+                xpPossible: result.xp_possible,
+                alreadyCompleted: result.already_completed,
+            },
+        );
+    }
+
 }
 
 function formatList(

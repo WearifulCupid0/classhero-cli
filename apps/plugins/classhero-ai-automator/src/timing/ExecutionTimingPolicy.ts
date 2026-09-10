@@ -100,6 +100,24 @@ export class ExecutionTimingPolicy {
         });
     }
 
+
+    /**
+     * Applies the same per-question policy to `quick_quiz` steps in a Trilha.
+     * Theory/checkpoint steps do not call this method.
+     */
+    async waitForInteractivePathQuestion(
+        questionStartedAt: number,
+    ): Promise<TimingWaitResult> {
+        const config = await this.store.get();
+
+        return this.waitForMinimum({
+            enabled: config.enabled,
+            targetId: "interactive-path",
+            startedAt: questionStartedAt,
+            minimumSeconds: config.quiz.secondsPerQuestion,
+        });
+    }
+
     /** Calculates the minimum total quiz time for display/planning purposes. */
     async getQuizMinimumSeconds(questionCount: number): Promise<number> {
         const config = await this.store.get();

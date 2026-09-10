@@ -12,7 +12,7 @@ export interface ObservedEndpoint {
     readonly responseTopLevel: readonly string[];
 }
 
-/** Sanitized union of endpoint signatures observed across the three supplied HAR files. */
+/** Sanitized union of endpoint signatures observed across the four supplied HAR files. */
 export const observedEndpoints = [
     {
         method: "GET",
@@ -636,6 +636,15 @@ export const observedEndpoints = [
         responseTopLevel: ["success"],
     },
     {
+        method: "POST",
+        path: "/quizzes/attempts/:id/questions/:id/hints/reveal",
+        statuses: [201],
+        queryKeys: [],
+        requestBodyKeys: [],
+        responseKind: ["object"],
+        responseTopLevel: ["balance", "hint", "hint_state"],
+    },
+    {
         method: "GET",
         path: "/quizzes/attempts/:id/questions/:id/json",
         statuses: [200],
@@ -753,6 +762,15 @@ export const observedEndpoints = [
         responseTopLevel: [],
     },
     {
+        method: "POST",
+        path: "/theme-materials/gamified-interactive-path/attempts/:id/complete",
+        statuses: [201],
+        queryKeys: [],
+        requestBodyKeys: [],
+        responseKind: ["object"],
+        responseTopLevel: ["already_completed", "attempt_id", "attempt_multiplier_applied", "attempt_number", "awarded_as_first_completion", "completed_at", "completion_bonus", "completion_bonus_awarded", "correct_steps", "created_at", "level_key", "material_id", "metadata", "path_id", "replay_factor_applied", "started_at", "status", "step_xp_after_scaling", "step_xp_before_scaling", "student_email", "theme_id", "total_steps", "total_xp_awarded", "updated_at", "wrong_steps", "xp_possible"],
+    },
+    {
         method: "GET",
         path: "/theme-materials/gamified-interactive-path/attempts/:id/credits/balance",
         statuses: [200],
@@ -760,6 +778,15 @@ export const observedEndpoints = [
         requestBodyKeys: [],
         responseKind: ["object"],
         responseTopLevel: ["available_credits"],
+    },
+    {
+        method: "POST",
+        path: "/theme-materials/gamified-interactive-path/attempts/:id/steps/:id/hint/reveal",
+        statuses: [201],
+        queryKeys: [],
+        requestBodyKeys: [],
+        responseKind: ["object"],
+        responseTopLevel: ["balance", "cost", "hint", "hints_revealed", "hints_total"],
     },
     {
         method: "POST",

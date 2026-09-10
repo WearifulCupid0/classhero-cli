@@ -10,6 +10,10 @@ import type {
     AutomationActivityLogger,
 } from "../logging/AutomationActivityLogger.js";
 import { WordSearchSolver } from "../solvers/WordSearchSolver.js";
+import {
+    getSourceMissionMaterialId,
+    requireActivityTarget,
+} from "../context/ActivityTargets.js";
 import type { ExecutionTimingPolicy } from "../timing/ExecutionTimingPolicy.js";
 
 /**
@@ -29,14 +33,17 @@ export class WordSearchExecutor {
         mode: GameMode,
     ): Promise<AutomationExecutionResult> {
         try {
+            const target = requireActivityTarget(context, "games");
+            const sourceMissionMaterialId = getSourceMissionMaterialId(context);
+
             const started = await this.api.games.wordSearch.start({
-                materialId: context.materialId,
+                materialId: target.materialId,
                 mode,
-                ...(context.themeMissionMaterialId === undefined
+                ...(sourceMissionMaterialId === undefined
                     ? {}
                     : {
                         themeMissionMaterialId:
-                            context.themeMissionMaterialId,
+                            sourceMissionMaterialId,
                     }),
             });
 
@@ -110,7 +117,7 @@ export class WordSearchExecutor {
                 mode,
                 hints_used: 0,
                 content_id: game.content_id,
-                material_id: context.materialId,
+                material_id: target.materialId,
             });
 
             if (!submitted.ok) {

@@ -1,18 +1,34 @@
 import type { ThemeMaterial } from "@classhero-cli/api-wrapper";
-import type {
-    CliContextSnapshot,
-    CliSelectedEntity,
+import {
+    isCliActivityBundle,
+    type CliActivityBundle,
+    type CliContextSnapshot,
+    type CliSelectedEntity,
 } from "@classhero-cli/plugin-api";
 import type {
     ActivityCapability,
     ActivityContext,
     ActivityKind,
+    ActivityTargetContext,
 } from "../contracts/activity.js";
 
 export class ActivityContextFactory {
     fromCliSnapshot(snapshot: CliContextSnapshot): ActivityContext | undefined {
         const selected = snapshot.activity;
-        if (!selected || !isThemeMaterial(selected.value)) {
+        if (!selected) {
+            return undefined;
+        }
+
+        if (isCliActivityBundle(selected.value)) {
+            return this.fromBundle(
+                selected.value,
+                selected.name,
+                snapshot.discipline,
+                snapshot.mission,
+            );
+        }
+
+        if (!isThemeMaterial(selected.value)) {
             return undefined;
         }
 
@@ -21,6 +37,50 @@ export class ActivityContextFactory {
             snapshot.discipline,
             snapshot.mission,
         );
+    }
+
+    fromBundle(
+        bundle: CliActivityBundle,
+        selectedName?: string,
+        discipline?: CliSelectedEntity,
+        mission?: CliSelectedEntity,
+    ): ActivityContext | undefined {
+        const targets = bundle.targets
+            .map((target) => target.value)
+            .filter(isThemeMaterial)
+            .map(toTargetContext)
+            .filter(
+                (target): target is ActivityTargetContext =>
+                    target !== undefined,
+            );
+
+        if (targets.length === 0) {
+            return undefined;
+        }
+
+        const primary = targets[0]!;
+        const sourceId = bundle.source?.id;
+        const sourceTitle = bundle.source?.name;
+        const capabilities = uniqueCapabilities(targets);
+
+        return {
+            materialId: primary.materialId,
+            themeId: primary.activity.theme_id,
+            ...(sourceId === undefined
+                ? {}
+                : {
+                    sourceMissionMaterialId: sourceId,
+                    themeMissionMaterialId: sourceId,
+                }),
+            ...(sourceTitle === undefined ? {} : { sourceTitle }),
+            title: selectedName ?? sourceTitle ?? primary.title,
+            materialType: primary.materialType,
+            kind: primary.capability,
+            capabilities,
+            targets,
+            ...selectionMetadata(discipline, mission),
+            activity: primary.activity,
+        };
     }
 
     fromMaterial(
@@ -32,55 +92,39 @@ export class ActivityContextFactory {
             activity.theme_mission_material_id,
             activity.themeMissionMaterialId,
         );
-
-        const kind = classifyActivity(activity);
+        const target = toTargetContext(activity);
+        const kind = target?.capability ?? "unknown";
+        const targets = target ? [target] : [];
 
         return {
             materialId: activity.material_id,
             themeId: activity.theme_id,
             ...(themeMissionMaterialId === undefined
                 ? {}
-                : { themeMissionMaterialId }),
+                : {
+                    themeMissionMaterialId,
+                    sourceMissionMaterialId: themeMissionMaterialId,
+                }),
             title: activity.title,
             materialType: activity.type,
             kind,
-            capabilities: detectActivityCapabilities(
-                activity,
-                kind,
-            ),
-            ...(discipline === undefined
-                ? {}
-                : {
-                    disciplineId: discipline.id,
-                    ...(discipline.name === undefined
-                        ? {}
-                        : { disciplineName: discipline.name }),
-                }),
-            ...(mission === undefined
-                ? {}
-                : {
-                    missionId: mission.id,
-                    ...(mission.name === undefined
-                        ? {}
-                        : { missionName: mission.name }),
-                }),
+            capabilities: target ? [target.capability] : [],
+            targets,
+            ...selectionMetadata(discipline, mission),
             activity,
         };
     }
 }
 
-/** Classifies the primary raw material type. */
 export function classifyActivity(activity: ThemeMaterial): ActivityKind {
-    const type = normalizeType(activity.type);
+    const type = activity.type.trim().toLowerCase();
 
     if (type === "games" || type === "game") {
         return "games";
     }
-
     if (type.includes("quiz")) {
         return "quiz";
     }
-
     if (
         type.includes("interactive_path") ||
         type.includes("interactive-path") ||
@@ -88,21 +132,16 @@ export function classifyActivity(activity: ThemeMaterial): ActivityKind {
     ) {
         return "interactive-path";
     }
-
     if (
         type.includes("code") ||
         typeof activity.code_challenge_language === "string"
     ) {
         return "code";
     }
-
     if (
         type.includes("assignment") ||
         type.includes("discursive") ||
-        (
-            activity.assignment !== null &&
-            activity.assignment !== undefined
-        )
+        (activity.assignment !== null && activity.assignment !== undefined)
     ) {
         return "discursive";
     }
@@ -110,87 +149,51 @@ export function classifyActivity(activity: ThemeMaterial): ActivityKind {
     return "unknown";
 }
 
-/**
- * Detects all supported features instead of assuming one mutually-exclusive
- * activity family.
- */
-export function detectActivityCapabilities(
+function toTargetContext(
     activity: ThemeMaterial,
-    primaryKind: ActivityKind = classifyActivity(activity),
-): readonly ActivityCapability[] {
-    const result = new Set<ActivityCapability>();
-
-    if (primaryKind !== "unknown") {
-        result.add(primaryKind);
+): ActivityTargetContext | undefined {
+    const capability = classifyActivity(activity);
+    if (capability === "unknown") {
+        return undefined;
     }
 
-    const type = normalizeType(activity.type);
-
-    const hasQuizConfiguration =
-        activity.gamified_quiz_xp_config !== null ||
-        (
-            (primaryKind === "games" || primaryKind === "quiz") &&
-            activity.assignment_config !== null &&
-            hasQuestionConfiguration(
-                activity.assignment_config,
-            )
-        );
-
-    if (
-        type.includes("quiz") ||
-        hasQuizConfiguration
-    ) {
-        result.add("quiz");
-    }
-
-    const hasGameProgress =
-        positive(activity.game_xp_possible) ||
-        positive(activity.game_xp_earned) ||
-        activity.score_accepted_for_game === true ||
-        activity.games_all_non_study_modes_completed === true;
-
-    if (
-        primaryKind === "games" ||
-        (
-            primaryKind === "quiz" &&
-            hasGameProgress
-        )
-    ) {
-        result.add("games");
-    }
-
-    return [...result];
+    return {
+        capability,
+        materialId: activity.material_id,
+        materialType: activity.type,
+        title: activity.title,
+        activity,
+    };
 }
 
-function hasQuestionConfiguration(
-    config: ThemeMaterial["assignment_config"],
-): boolean {
-    if (!config) {
-        return false;
-    }
-
-    return Object.values(
-        config.levels,
-    ).some(
-        (level) =>
-            level?.enabled === true &&
-            Array.isArray(level.question_types) &&
-            level.question_types.length > 0,
-    );
+function uniqueCapabilities(
+    targets: readonly ActivityTargetContext[],
+): ActivityCapability[] {
+    return [...new Set(targets.map((target) => target.capability))];
 }
 
-function positive(
-    value: number | null | undefined,
-): boolean {
-    return (
-        typeof value === "number" &&
-        Number.isFinite(value) &&
-        value > 0
-    );
-}
-
-function normalizeType(value: string): string {
-    return value.trim().toLowerCase();
+function selectionMetadata(
+    discipline?: CliSelectedEntity,
+    mission?: CliSelectedEntity,
+): Partial<ActivityContext> {
+    return {
+        ...(discipline === undefined
+            ? {}
+            : {
+                disciplineId: discipline.id,
+                ...(discipline.name === undefined
+                    ? {}
+                    : { disciplineName: discipline.name }),
+            }),
+        ...(mission === undefined
+            ? {}
+            : {
+                missionId: mission.id,
+                ...(mission.name === undefined
+                    ? {}
+                    : { missionName: mission.name }),
+            }),
+    };
 }
 
 function isThemeMaterial(value: unknown): value is ThemeMaterial {
@@ -198,12 +201,9 @@ function isThemeMaterial(value: unknown): value is ThemeMaterial {
         return false;
     }
 
-    return [
-        "material_id",
-        "theme_id",
-        "type",
-        "title",
-    ].every((key) => typeof value[key] === "string");
+    return ["material_id", "theme_id", "type", "title"].every(
+        (key) => typeof value[key] === "string",
+    );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

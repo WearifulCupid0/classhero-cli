@@ -25,10 +25,29 @@ export interface JourneyMapSettings extends UnknownRecord {
     closing_teacher_image_position?: JourneyTeacherImagePosition;
 }
 
+/**
+ * Relation between one Journey Map source resource and a related executable
+ * target.
+ *
+ * The complete HAR confirms `practice_for_pdf` relations from a
+ * `mission_material` PDF to separate `theme_material` targets such as
+ * `gamified_quiz` and `games`.
+ */
+export interface JourneyTargetRelation extends UnknownRecord {
+    relation: string;
+    evidence_count?: number;
+    source_target_id: string;
+    related_target_id: string;
+    source_target_type: string;
+    related_target_type: string;
+    source_target_scope: string;
+    related_target_scope: string;
+}
+
 export interface JourneyMapGenerationMetadata extends UnknownRecord {
     source?: string;
     contract_version?: string;
-    target_relations?: UnknownRecord[];
+    target_relations?: JourneyTargetRelation[];
     consolidation_targets?: UnknownRecord[];
     mission_consolidation_targets?: UnknownRecord[];
     background_image_prompt?: string;
@@ -45,6 +64,41 @@ export interface JourneyMapValidationResult extends UnknownRecord {
 
 export interface JourneyUnlockRule extends UnknownRecord {
     prerequisite_node_keys?: string[];
+}
+
+/** One game/mode progress entry embedded in an associated `games` action. */
+export interface JourneyAssociatedGameProgress extends UnknownRecord {
+    game_key: string;
+    mode: string;
+    xp_earned: number;
+    xp_possible: number;
+    completed: boolean;
+    attempt_id?: string;
+}
+
+/**
+ * Student-specific progress for one action attached to a Journey Map resource.
+ */
+export interface JourneyAssociatedAction extends UnknownRecord {
+    target_type: string;
+    target_id: string;
+    is_required: boolean;
+    started: boolean;
+    completed: boolean;
+    xp_earned: number;
+    xp_possible: number;
+
+    /** Quiz-like progress fields. */
+    approved_total?: number;
+    attempt_total?: number;
+    answered_total?: number;
+    pending_total?: number;
+
+    /** Mini-game progress fields. */
+    completed_total?: number;
+    max_total?: number;
+    score?: number;
+    game_progress?: JourneyAssociatedGameProgress[];
 }
 
 export interface JourneyMapNode extends UnknownRecord {
@@ -69,7 +123,7 @@ export interface JourneyMapNode extends UnknownRecord {
     created_at: string;
     updated_at: string;
     completion_policy: unknown | null;
-    associated_actions?: UnknownRecord[];
+    associated_actions?: JourneyAssociatedAction[];
     state?: string;
 }
 
@@ -112,7 +166,7 @@ export interface JourneyProgressState extends UnknownRecord {
     completed: boolean;
     xp_earned?: number;
     xp_possible?: number;
-    associated_actions?: UnknownRecord[];
+    associated_actions?: JourneyAssociatedAction[];
 }
 
 export interface JourneyMapProgress extends UnknownRecord {

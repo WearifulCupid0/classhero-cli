@@ -1,10 +1,13 @@
 import type {
     AuthenticatedUser,
+    JourneyMapNode,
+    MissionMaterial,
     StudentDiscipline,
     ThemeMaterial,
     XpMission,
 } from "@classhero-cli/api-wrapper";
 import type {
+    CliActivityBundle,
     CliContextProvider,
     CliContextSnapshot,
     CliSelectedEntity,
@@ -26,11 +29,23 @@ export interface SelectedMission {
     readonly value: XpMission;
 }
 
-/** Activity/material selection retained by the interactive session. */
+/** Source values currently used by logical activity bundles. */
+export type SelectedActivitySource =
+    | MissionMaterial
+    | JourneyMapNode;
+
+/** Value exposed to plugins for the current logical activity. */
+export type SelectedActivityBundle =
+    CliActivityBundle<
+        SelectedActivitySource,
+        ThemeMaterial
+    >;
+
+/** Logical activity retained by the interactive session. */
 export interface SelectedActivity {
     readonly id: string;
     readonly name: string;
-    readonly value: ThemeMaterial;
+    readonly value: SelectedActivityBundle;
 }
 
 /** Mutable application state owned exclusively by the CLI host. */
@@ -90,11 +105,16 @@ export class AppContext implements CliContextProvider {
         this.selectedActivity = undefined;
     }
 
-    selectActivity(activity: ThemeMaterial): void {
+    /** Stores one logical activity assembled by {@link ActivityFlow}. */
+    selectActivity(
+        id: string,
+        name: string,
+        value: SelectedActivityBundle,
+    ): void {
         this.selectedActivity = {
-            id: activity.material_id,
-            name: activity.title,
-            value: activity,
+            id,
+            name,
+            value,
         };
     }
 
@@ -147,6 +167,14 @@ export class AppContext implements CliContextProvider {
     }
 }
 
-function toSelectedEntity<T>(id: string, name: string, value: T): CliSelectedEntity<T> {
-    return { id, name, value };
+function toSelectedEntity<T>(
+    id: string,
+    name: string,
+    value: T,
+): CliSelectedEntity<T> {
+    return {
+        id,
+        name,
+        value,
+    };
 }

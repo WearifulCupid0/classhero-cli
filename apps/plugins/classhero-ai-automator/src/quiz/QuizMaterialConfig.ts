@@ -6,6 +6,7 @@ import type {
 import type {
     ActivityContext,
 } from "../contracts/activity.js";
+import { getActivityTarget } from "../context/ActivityTargets.js";
 
 /**
  * Returns the effective quiz-level configuration for one activity.
@@ -16,9 +17,12 @@ import type {
 export function getQuizLevelsConfig(
     context: ActivityContext,
 ): MaterialLevelsConfig | undefined {
+    const activity =
+        getActivityTarget(context, "quiz")?.activity ??
+        context.activity;
+
     const direct =
-        context.activity
-            .gamified_quiz_xp_config;
+        activity.gamified_quiz_xp_config;
 
     if (direct) {
         return direct;
@@ -30,8 +34,7 @@ export function getQuizLevelsConfig(
         )
     ) {
         return (
-            context.activity
-                .assignment_config ??
+            activity.assignment_config ??
             undefined
         );
     }
