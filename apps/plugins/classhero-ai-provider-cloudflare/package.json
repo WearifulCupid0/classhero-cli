@@ -1,0 +1,37 @@
+{
+  "name": "@classhero-cli/classhero-ai-provider-cloudflare",
+  "version": "1.2.0",
+  "private": true,
+  "description": "Cloudflare AI Gateway AIProvider plugin for the ClassHero CLI automator.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -b",
+    "build:watch": "tsc -b --watch --preserveWatchOutput",
+    "clean": "tsc -b --clean"
+  },
+  "dependencies": {
+    "@ai-sdk/provider": "^4.0.1",
+    "@classhero-cli/classhero-ai-automator": "workspace:*",
+    "@classhero-cli/plugin-api": "workspace:*",
+    "ai": "^7.0.97",
+    "ai-gateway-provider": "^4.0.0",
+    "zod": "^4.1.8"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "license": "MIT"
+}

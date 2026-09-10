@@ -17,6 +17,9 @@
       "path": "./apps/plugins/classhero-ai-provider-openai"
     },
     {
+      "path": "./apps/plugins/classhero-ai-provider-cloudflare"
+    },
+    {
       "path": "./apps/cli"
     }
   ]
