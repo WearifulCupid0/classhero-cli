@@ -1,3 +1,7 @@
+import { spawn } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import * as clack from "@clack/prompts";
 import type {
     AnyPromptDefinition,
@@ -6,6 +10,11 @@ import type {
     PromptRenderer,
 } from "@classhero-cli/plugin-api";
 import { cancelled, submitted } from "@classhero-cli/plugin-api";
+
+interface TextEditorPayload {
+    readonly initialValue?: string;
+    readonly filename?: string;
+}
 
 /** Bridges renderer-neutral plugin API prompts to `@clack/prompts`. */
 export class ClackPromptRenderer implements PromptRenderer {
@@ -78,8 +87,17 @@ export class ClackPromptRenderer implements PromptRenderer {
                 return toRenderResult(result);
             }
 
-            case "custom":
-                throw new Error(`Renderer customizado não suportado pelo host: ${definition.renderer}`);
+            case "custom": {
+                if (definition.renderer !== "text-editor") {
+                    throw new Error(`Renderer customizado não suportado pelo host: ${definition.renderer}`);
+                }
+
+                const payload = parseTextEditorPayload(definition.payload);
+                return openTextEditor(
+                    payload.initialValue ?? "",
+                    payload.filename ?? "classhero-response.md",
+                );
+            }
         }
     }
 }
@@ -102,4 +120,105 @@ function toRenderResult(value: unknown): PromptRenderResult<unknown> {
     }
 
     return submitted(value);
+}
+
+function parseTextEditorPayload(value: unknown): TextEditorPayload {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+        return {};
+    }
+
+    const record = value as Record<string, unknown>;
+
+    return {
+        ...(typeof record.initialValue === "string"
+            ? { initialValue: record.initialValue }
+            : {}),
+        ...(typeof record.filename === "string" && record.filename.trim().length > 0
+            ? { filename: sanitizeFilename(record.filename) }
+            : {}),
+    };
+}
+
+async function openTextEditor(
+    initialValue: string,
+    filename: string,
+): Promise<PromptRenderResult<string>> {
+    const directory = await mkdtemp(
+        join(tmpdir(), "classhero-cli-editor-"),
+    );
+    const filepath = join(directory, sanitizeFilename(filename));
+
+    try {
+        await writeFile(filepath, initialValue, "utf8");
+
+        const exitCode = await launchEditor(filepath);
+        if (exitCode !== 0) {
+            return cancelled(`editor-exit-${exitCode}`);
+        }
+
+        return submitted(
+            await readFile(filepath, "utf8"),
+        );
+    } finally {
+        await rm(directory, {
+            recursive: true,
+            force: true,
+        }).catch(() => undefined);
+    }
+}
+
+async function launchEditor(filepath: string): Promise<number> {
+    const configuredEditor = process.env.VISUAL?.trim() || process.env.EDITOR?.trim();
+
+    if (configuredEditor) {
+        return spawnAndWait(
+            `${configuredEditor} ${shellQuote(filepath)}`,
+            [],
+            true,
+        );
+    }
+
+    if (process.platform === "win32") {
+        return spawnAndWait("notepad.exe", [filepath], false);
+    }
+
+    if (process.platform === "darwin") {
+        return spawnAndWait("open", ["-W", "-a", "TextEdit", filepath], false);
+    }
+
+    return spawnAndWait("vi", [filepath], false);
+}
+
+function spawnAndWait(
+    command: string,
+    args: readonly string[],
+    shell: boolean,
+): Promise<number> {
+    return new Promise((resolve, reject) => {
+        const child = spawn(command, [...args], {
+            shell,
+            stdio: "inherit",
+        });
+
+        child.once("error", reject);
+        child.once("exit", (code) => resolve(code ?? 1));
+    });
+}
+
+function shellQuote(value: string): string {
+    if (process.platform === "win32") {
+        return `"${value.replaceAll('"', '\\"')}"`;
+    }
+
+    return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function sanitizeFilename(value: string): string {
+    const normalized = value
+        .trim()
+        .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "-");
+
+    return normalized.length > 0
+        ? normalized
+        : "classhero-response.md";
 }
