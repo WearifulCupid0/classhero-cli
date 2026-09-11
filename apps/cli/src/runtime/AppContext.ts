@@ -34,11 +34,16 @@ export type SelectedActivitySource =
     | MissionMaterial
     | JourneyMapNode;
 
+/** Target values exposed by Journey-aware logical activities. */
+export type SelectedActivityTarget =
+    | ThemeMaterial
+    | JourneyMapNode;
+
 /** Value exposed to plugins for the current logical activity. */
 export type SelectedActivityBundle =
     CliActivityBundle<
         SelectedActivitySource,
-        ThemeMaterial
+        SelectedActivityTarget
     >;
 
 /** Logical activity retained by the interactive session. */

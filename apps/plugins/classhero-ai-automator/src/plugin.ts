@@ -5,6 +5,12 @@ import {
 } from "@classhero-cli/plugin-api";
 import { AutomationEngine } from "./engine/AutomationEngine.js";
 import { AutomationActivityLogger } from "./logging/AutomationActivityLogger.js";
+import {
+    KnowledgeMapActivityFlow,
+} from "./knowledge-map/KnowledgeMapActivityFlow.js";
+import {
+    knowledgeMapActivityFromSnapshot,
+} from "./knowledge-map/KnowledgeMapActivity.js";
 import { MissionActionsFlow } from "./mission/MissionActionsFlow.js";
 import { AI_PROVIDER } from "./providers/tokens.js";
 import { AUTOMATION_ENGINE } from "./services/tokens.js";
@@ -23,7 +29,7 @@ export const plugin: ClassHeroPlugin = {
     manifest: {
         id: "classhero-ai-automator",
         name: "ClassHero AI Automator",
-        version: "1.8.0",
+        version: "1.9.0",
         apiVersion: PLUGIN_API_VERSION,
         description: "Automação híbrida com solvers nativos, providers de IA e política configurável de tempo mínimo.",
     },
@@ -79,6 +85,11 @@ export const plugin: ClassHeroPlugin = {
             engine,
         );
 
+        const knowledgeMapFlow = new KnowledgeMapActivityFlow(
+            context,
+            engine,
+        );
+
         context.services.provide(
             AUTOMATION_ENGINE,
             engine,
@@ -98,17 +109,36 @@ export const plugin: ClassHeroPlugin = {
                     snapshot?.authenticated &&
                     snapshot.activity
                 ) {
-                    menu.addBefore(
-                        "main.plugins",
-                        {
-                            id: "classhero-ai-automator.open",
-                            value: "classhero-ai-automator.open",
-                            label: "Automatizar atividade",
-                            hint: "algoritmo nativo ou IA conforme o tipo",
-                            onSelect: async () =>
-                                automatorFlow.run(),
-                        },
-                    );
+                    const knowledgeMap =
+                        knowledgeMapActivityFromSnapshot(
+                            snapshot,
+                        );
+
+                    if (knowledgeMap) {
+                        menu.addBefore(
+                            "main.plugins",
+                            {
+                                id: "classhero-ai-automator.knowledge-map.open",
+                                value: "classhero-ai-automator.knowledge-map.open",
+                                label: "Preencher atividade",
+                                hint: `${knowledgeMap.title} · manual ou IA opcional`,
+                                onSelect: async () =>
+                                    knowledgeMapFlow.run(),
+                            },
+                        );
+                    } else {
+                        menu.addBefore(
+                            "main.plugins",
+                            {
+                                id: "classhero-ai-automator.open",
+                                value: "classhero-ai-automator.open",
+                                label: "Automatizar atividade",
+                                hint: "algoritmo nativo ou IA conforme o tipo",
+                                onSelect: async () =>
+                                    automatorFlow.run(),
+                            },
+                        );
+                    }
                 }
 
                 if (
@@ -121,7 +151,7 @@ export const plugin: ClassHeroPlugin = {
                             id: "classhero-ai-automator.mission-actions.open",
                             value: "classhero-ai-automator.mission-actions.open",
                             label: "Ações da missão",
-                            hint: "jogo bônus, reflexão final e síntese conceitual",
+                            hint: "jogo bônus e reflexão final",
                             onSelect: async () =>
                                 missionActionsFlow.run(),
                         },

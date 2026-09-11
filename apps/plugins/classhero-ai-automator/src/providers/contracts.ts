@@ -10,7 +10,8 @@ import type {
 export type AIProviderTaskId =
     | AutomationTargetId
     | "mission-reflection"
-    | "mission-synthesis";
+    | "mission-synthesis"
+    | "knowledge-map";
 
 /** Semantic capabilities that an AI provider may advertise. */
 export type AIProviderCapability =

@@ -22,6 +22,10 @@ import type {
     AutomationEngine,
     ExecuteAutomationOptions,
 } from "../engine/AutomationEngine.js";
+import type {
+    GameModeEligibility,
+    RetryControlledGameId,
+} from "../games/GameEligibilityPolicy.js";
 import {
     getEnabledQuizLevels,
     getQuizLevelConfig,
@@ -167,7 +171,10 @@ export class AutomatorFlow {
             )
         ) {
             const mode =
-                await this.selectGameMode();
+                await this.selectGameMode(
+                    activity,
+                    target.id,
+                );
 
             if (!mode) {
                 return;
@@ -266,43 +273,73 @@ export class AutomatorFlow {
         }
     }
 
-    private async selectGameMode(): Promise<GameMode | undefined> {
+    private async selectGameMode(
+        activity: ActivityContext,
+        targetId: RetryControlledGameId,
+    ): Promise<GameMode | undefined> {
+        const eligibility =
+            await this.engine.gameModes(
+                activity,
+                targetId,
+            );
+
+        const byMode =
+            new Map(
+                eligibility.map(
+                    (item) => [
+                        item.mode,
+                        item,
+                    ],
+                ),
+            );
+
+        const study =
+            byMode.get(
+                "estudo",
+            );
+        const focus =
+            byMode.get(
+                "foco",
+            );
+        const challenge =
+            byMode.get(
+                "desafio",
+            );
+
+        const initialValue:
+            GameMode =
+            challenge?.allowed
+                ? "desafio"
+                : focus?.allowed
+                    ? "foco"
+                    : "estudo";
+
         const result =
             await this.context.prompts.run<GameMode>({
                 id: "classhero-ai-automator.game-mode",
                 kind: "select",
                 message: "Modo do jogo",
                 options: [
-                    {
-                        id: "classhero-ai-automator.mode.estudo",
-                        value:
-                            "estudo",
-                        label:
-                            "Estudo",
-                        hint:
-                            "prática livre",
-                    },
-                    {
-                        id: "classhero-ai-automator.mode.foco",
-                        value:
-                            "foco",
-                        label:
-                            "Foco",
-                        hint:
-                            "pontuação intermediária",
-                    },
-                    {
-                        id: "classhero-ai-automator.mode.desafio",
-                        value:
-                            "desafio",
-                        label:
-                            "Desafio",
-                        hint:
-                            "maior recompensa possível",
-                    },
+                    gameModeOption(
+                        "estudo",
+                        "Estudo",
+                        study,
+                        "prática livre · repetição ilimitada",
+                    ),
+                    gameModeOption(
+                        "foco",
+                        "Foco",
+                        focus,
+                        "pontuação intermediária",
+                    ),
+                    gameModeOption(
+                        "desafio",
+                        "Desafio",
+                        challenge,
+                        "maior recompensa possível",
+                    ),
                 ],
-                initialValue:
-                    "desafio",
+                initialValue,
             });
 
         return result.status ===
@@ -804,12 +841,42 @@ function quizLevelLabel(
 
 function isMiniGameTarget(
     targetId: AutomationTargetId,
-): boolean {
+): targetId is RetryControlledGameId {
     return (
         targetId === "word-search" ||
         targetId === "memory" ||
-        targetId === "hangman"
+        targetId === "hangman" ||
+        targetId === "anagram"
     );
+}
+
+function gameModeOption(
+    mode: "estudo" | "foco" | "desafio",
+    label: string,
+    eligibility: GameModeEligibility | undefined,
+    defaultHint: string,
+) {
+    const allowed =
+        eligibility?.allowed ??
+        (mode === "estudo");
+
+    return {
+        id:
+            `classhero-ai-automator.mode.${mode}`,
+        value:
+            mode as GameMode,
+        label,
+        hint:
+            eligibility?.reason ??
+            defaultHint,
+        ...(allowed
+            ? {}
+            : {
+                disabled:
+                    eligibility?.reason ??
+                    "Modo indisponível.",
+            }),
+    };
 }
 
 function buildTargetHint(

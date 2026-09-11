@@ -90,6 +90,14 @@ export class HangmanExecutor {
             );
 
             if (!response.ok) {
+                if (response.status === 409) {
+                    return blocked(
+                        responseMessage(response.response) ??
+                        "O ClassHero bloqueou uma nova tentativa da forca para este escopo/modo.",
+                        { scope: scope.kind },
+                    );
+                }
+
                 return failed(
                     `Falha ao preparar a forca (HTTP ${response.status}).`,
                     { scope: scope.kind },
@@ -459,6 +467,39 @@ function createInitialBackendState(
         won: false,
         lost: false,
     };
+}
+
+function blocked(
+    message: string,
+    details?: Readonly<Record<string, unknown>>,
+): AutomationExecutionResult {
+    return {
+        status: "blocked",
+        targetId: "hangman",
+        strategy: "ai",
+        message,
+        ...(details === undefined ? {} : { details }),
+    };
+}
+
+function responseMessage(
+    value: unknown,
+): string | undefined {
+    if (
+        typeof value !== "object" ||
+        value === null ||
+        Array.isArray(value)
+    ) {
+        return undefined;
+    }
+
+    const message =
+        (value as Record<string, unknown>).message;
+
+    return typeof message === "string" &&
+        message.trim().length > 0
+        ? message
+        : undefined;
 }
 
 function failed(

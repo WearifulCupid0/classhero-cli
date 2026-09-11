@@ -63,6 +63,14 @@ export class MemoryExecutor {
                 );
 
             if (!started.ok) {
+                if (started.status === 409) {
+                    return blocked(
+                        responseMessage(started.response) ??
+                        "O ClassHero bloqueou uma nova tentativa do jogo da memória para este escopo/modo.",
+                        { scope: scope.kind },
+                    );
+                }
+
                 return failed(
                     `Falha ao preparar o jogo da memória (HTTP ${started.status}).`,
                 );
@@ -237,6 +245,39 @@ function realElapsedSeconds(startedAt: number): number {
 
 function roundSeconds(seconds: number): number {
     return Math.round(seconds * 100) / 100;
+}
+
+function blocked(
+    message: string,
+    details?: Readonly<Record<string, unknown>>,
+): AutomationExecutionResult {
+    return {
+        status: "blocked",
+        targetId: "memory",
+        strategy: "native",
+        message,
+        ...(details === undefined ? {} : { details }),
+    };
+}
+
+function responseMessage(
+    value: unknown,
+): string | undefined {
+    if (
+        typeof value !== "object" ||
+        value === null ||
+        Array.isArray(value)
+    ) {
+        return undefined;
+    }
+
+    const message =
+        (value as Record<string, unknown>).message;
+
+    return typeof message === "string" &&
+        message.trim().length > 0
+        ? message
+        : undefined;
 }
 
 function failed(

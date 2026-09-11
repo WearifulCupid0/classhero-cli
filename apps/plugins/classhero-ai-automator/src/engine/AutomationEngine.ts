@@ -21,6 +21,12 @@ import {
     type QuizExecutionOptions,
 } from "../executors/QuizExecutor.js";
 import { WordSearchExecutor } from "../executors/WordSearchExecutor.js";
+import {
+    GameEligibilityPolicy,
+    isRetryControlledGame,
+    type GameModeEligibility,
+    type RetryControlledGameId,
+} from "../games/GameEligibilityPolicy.js";
 import type { AutomationActivityLogger } from "../logging/AutomationActivityLogger.js";
 import { AutomationPlanner } from "../planner/AutomationPlanner.js";
 import type {
@@ -112,14 +118,18 @@ export class AutomationEngine {
     private readonly hangman: HangmanExecutor;
     private readonly quiz: QuizExecutor;
     private readonly interactivePath: InteractivePathExecutor;
+    private readonly gameEligibility: GameEligibilityPolicy;
 
     constructor(
-        api: ClassHero,
+        private readonly api: ClassHero,
         private readonly providerResolver: () => readonly AIProvider[],
         private readonly timingPolicy: ExecutionTimingPolicy,
         private readonly activityLogger: AutomationActivityLogger,
         private readonly planner = new AutomationPlanner(),
     ) {
+        this.gameEligibility = new GameEligibilityPolicy(
+            api,
+        );
         this.wordSearch = new WordSearchExecutor(
             api,
             timingPolicy,
@@ -165,6 +175,21 @@ export class AutomationEngine {
 
     logging(): AutomationActivityLogger {
         return this.activityLogger;
+    }
+
+    /**
+     * Returns Study/Focus/Challenge availability for one material game.
+     * This performs only read requests and is reused by the UI before the
+     * player is asked to choose a mode.
+     */
+    gameModes(
+        context: ActivityContext,
+        targetId: RetryControlledGameId,
+    ): Promise<readonly GameModeEligibility[]> {
+        return this.gameEligibility.inspect(
+            context,
+            targetId,
+        );
     }
 
     /**
@@ -232,6 +257,49 @@ export class AutomationEngine {
         targetId: AutomationTargetId,
         options: ExecuteAutomationOptions = {},
     ): Promise<AutomationExecutionResult> {
+        if (isRetryControlledGame(targetId)) {
+            const mode =
+                options.mode ??
+                "desafio";
+
+            const eligibility =
+                await this.gameEligibility.check(
+                    context,
+                    targetId,
+                    mode,
+                );
+
+            if (!eligibility.allowed) {
+                return {
+                    status:
+                        "blocked",
+                    targetId,
+                    strategy:
+                        targetId === "word-search" ||
+                        targetId === "memory"
+                            ? "native"
+                            : "ai",
+                    message:
+                        eligibility.reason,
+                    details: {
+                        mode:
+                            eligibility.mode,
+                        source:
+                            eligibility.source,
+                        ...(eligibility.xpEarned === undefined
+                            ? {}
+                            : { xpEarned: eligibility.xpEarned }),
+                        ...(eligibility.completed === undefined
+                            ? {}
+                            : { completed: eligibility.completed }),
+                        ...(eligibility.xpPossible === undefined
+                            ? {}
+                            : { xpPossible: eligibility.xpPossible }),
+                    },
+                };
+            }
+        }
+
         const preflight =
             await this.resolvePreflight(
                 targetId,
@@ -370,6 +438,33 @@ export class AutomationEngine {
         targetId: MissionBonusGameTargetId,
         preferredProviderId?: string,
     ): Promise<AutomationExecutionResult> {
+        const bonusEligibility =
+            await this.verifyMissionBonusEligibility(
+                mission,
+                targetId,
+            );
+
+        if (!bonusEligibility.allowed) {
+            return {
+                status:
+                    "blocked",
+                targetId,
+                strategy:
+                    targetId === "hangman"
+                        ? "ai"
+                        : "native",
+                message:
+                    bonusEligibility.reason,
+                details: {
+                    source:
+                        bonusEligibility.source,
+                    ...(bonusEligibility.missionBonusXp === undefined
+                        ? {}
+                        : { missionBonusXp: bonusEligibility.missionBonusXp }),
+                },
+            };
+        }
+
         switch (targetId) {
             case "memory":
                 return this.memory.executeMission(
@@ -404,6 +499,96 @@ export class AutomationEngine {
                 );
             }
         }
+    }
+
+    /**
+     * Re-checks the one-shot mission bonus at engine level so direct service
+     * callers cannot bypass the interactive MissionBonusGameFlow.
+     */
+    private async verifyMissionBonusEligibility(
+        mission: MissionAutomationContext,
+        targetId: MissionBonusGameTargetId,
+    ): Promise<{
+        readonly allowed: boolean;
+        readonly reason: string;
+        readonly source: "xp-progress" | "games-available" | "unverified";
+        readonly missionBonusXp?: number;
+    }> {
+        if (mission.courseId) {
+            const xp =
+                await this.api.xpProgress.missions(
+                    mission.courseId,
+                );
+
+            if (xp.ok) {
+                const current =
+                    xp.response.missions.find(
+                        (item) =>
+                            item.theme_id ===
+                            mission.missionId,
+                    );
+
+                if (
+                    current &&
+                    current.mission_bonus_xp > 0
+                ) {
+                    return {
+                        allowed:
+                            false,
+                        reason:
+                            "O jogo bônus desta missão já foi realizado e só pode ser executado uma vez.",
+                        source:
+                            "xp-progress",
+                        missionBonusXp:
+                            current.mission_bonus_xp,
+                    };
+                }
+            }
+        }
+
+        const available =
+            await this.api.games.available({
+                materialId:
+                    mission.missionId,
+                mode:
+                    "desafio",
+            });
+
+        if (!available.ok) {
+            return {
+                allowed:
+                    false,
+                reason:
+                    `Não foi possível verificar a elegibilidade do jogo bônus (HTTP ${available.status}); nenhum jogo foi iniciado.`,
+                source:
+                    "unverified",
+            };
+        }
+
+        const advertised =
+            available.response.games.some(
+                (game) =>
+                    String(game.id) ===
+                    targetId,
+            );
+
+        return advertised
+            ? {
+                allowed:
+                    true,
+                reason:
+                    "O ClassHero ainda anuncia este jogo como bônus disponível.",
+                source:
+                    "games-available",
+            }
+            : {
+                allowed:
+                    false,
+                reason:
+                    `O ClassHero não anuncia '${targetId}' como jogo bônus disponível para esta missão.`,
+                source:
+                    "games-available",
+            };
     }
 
     private async resolvePreflight(

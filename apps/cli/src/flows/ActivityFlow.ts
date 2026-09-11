@@ -55,38 +55,21 @@ export class ActivityFlow {
             return;
         }
 
-        const materialsResponse =
-            await this.api.themeMaterials.byTheme(
-                mission.id,
-            );
-
-        if (!materialsResponse.ok) {
-            clack.note(
-                `Falha ao carregar atividades (HTTP ${materialsResponse.status}).`,
-            );
-            return;
-        }
-
-        const themeMaterials = [
-            ...materialsResponse.response,
-        ];
-
-        if (themeMaterials.length === 0) {
-            clack.note(
-                "Nenhuma atividade disponível nesta missão.",
-            );
-            return;
-        }
-
         /*
-         * These three requests enrich navigation, but none is mandatory for
-         * the fallback flow.
+         * Journey Map is a first-class activity source. In particular,
+         * knowledge-map/synthesis nodes may exist even when there are no
+         * ThemeMaterials, so a failed/empty material request must not hide
+         * them from the activity picker.
          */
         const [
+            materialsResponse,
             journeyResponse,
             progressResponse,
             missionMaterialsResponse,
         ] = await Promise.all([
+            this.api.themeMaterials.byTheme(
+                mission.id,
+            ),
             this.api.journeyMap.student(
                 mission.id,
             ),
@@ -97,6 +80,23 @@ export class ActivityFlow {
                 mission.id,
             ),
         ]);
+
+        if (
+            !materialsResponse.ok &&
+            !journeyResponse.ok
+        ) {
+            clack.note(
+                `Falha ao carregar atividades (materiais HTTP ${materialsResponse.status}; jornada HTTP ${journeyResponse.status}).`,
+            );
+            return;
+        }
+
+        const themeMaterials =
+            materialsResponse.ok
+                ? [
+                    ...materialsResponse.response,
+                ]
+                : [];
 
         const choices =
             buildActivityChoices({
@@ -311,6 +311,19 @@ function buildActivityChoices(
                     node,
                     source,
                     targets,
+                ),
+            );
+            continue;
+        }
+
+        if (
+            node.target_scope ===
+                "knowledge_map"
+        ) {
+            choices.push(
+                knowledgeMapChoice(
+                    node,
+                    input.progress,
                 ),
             );
             continue;
@@ -577,6 +590,57 @@ function logicalChoiceFromSource(
     };
 }
 
+function knowledgeMapChoice(
+    node: JourneyMapNode,
+    progress: JourneyMapProgress | undefined,
+): ActivityChoice {
+    const target:
+        CliActivityTarget<JourneyMapNode> = {
+        id:
+            node.target_id,
+        type:
+            node.target_type,
+        name:
+            node.title,
+        value:
+            node,
+    };
+
+    const state =
+        progress === undefined
+            ? undefined
+            : progress[
+                node.node_key
+            ];
+
+    const completed =
+        isProgressState(
+            state,
+        ) &&
+        state.completed ===
+            true;
+
+    return {
+        /* node_id keeps two Journey nodes distinct even if they target the
+         * same knowledge-map resource. */
+        id:
+            `knowledge-map:${node.node_id}`,
+        name:
+            node.title,
+        hint:
+            `${targetTypeLabel(node.target_type)} · ${completed ? "concluída" : "pendente"}`,
+        sortOrder:
+            node.order_index,
+        value: {
+            kind:
+                "classhero-activity-bundle",
+            targets: [
+                target,
+            ],
+        },
+    };
+}
+
 function standaloneChoice(
     material: ThemeMaterial,
     sortOrder: number,
@@ -719,6 +783,16 @@ function targetTypeLabel(
         case "gamified_interactive_path":
             return "Trilha";
 
+        case "initial_mind_map":
+            return "Mapa inicial";
+
+        case "final_concept_map":
+            return "Síntese conceitual";
+
+        case "knowledge_map":
+        case "concept_map":
+            return "Síntese / mapa conceitual";
+
         case "code":
         case "code_challenge":
         case "code_challenge_gamified":
@@ -742,6 +816,7 @@ function unique(
 function isProgressState(
     value: unknown,
 ): value is {
+    readonly completed?: boolean;
     readonly associated_actions?: readonly JourneyAssociatedAction[];
 } {
     return (

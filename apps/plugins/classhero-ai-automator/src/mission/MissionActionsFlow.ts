@@ -14,38 +14,53 @@ import {
 import {
     MissionReflectionFlow,
 } from "./MissionReflectionFlow.js";
-import {
-    MissionSynthesisFlow,
-} from "./MissionSynthesisFlow.js";
 
 type MissionAction =
     | "bonus-game"
     | "reflection"
-    | "synthesis"
     | "back";
 
-/** Entry point for mission-scoped features that are not normal activities. */
+/**
+ * Mission-scoped actions that are not normal Journey Map activities.
+ *
+ * Knowledge maps/syntheses intentionally do not live here anymore: each
+ * `knowledge_map` Journey node appears in the normal ActivityFlow and is
+ * filled from its selected activity.
+ */
 export class MissionActionsFlow {
-    private readonly bonusGames: MissionBonusGameFlow;
-    private readonly reflection: MissionReflectionFlow;
-    private readonly synthesis: MissionSynthesisFlow;
+    private readonly bonusGames:
+        MissionBonusGameFlow;
+    private readonly reflection:
+        MissionReflectionFlow;
 
     constructor(
-        private readonly context: PluginContext,
-        engine: AutomationEngine,
+        private readonly context:
+            PluginContext,
+        engine:
+            AutomationEngine,
     ) {
-        this.bonusGames = new MissionBonusGameFlow(context, engine);
-        this.reflection = new MissionReflectionFlow(context, engine);
-        this.synthesis = new MissionSynthesisFlow(context, engine);
+        this.bonusGames =
+            new MissionBonusGameFlow(
+                context,
+                engine,
+            );
+        this.reflection =
+            new MissionReflectionFlow(
+                context,
+                engine,
+            );
     }
 
     async run(): Promise<void> {
-        const snapshot = this.context.services
-            .get(CLI_CONTEXT)
-            ?.getSnapshot();
+        const snapshot =
+            this.context.services
+                .get(CLI_CONTEXT)
+                ?.getSnapshot();
 
         const mission = snapshot
-            ? missionContextFromSnapshot(snapshot)
+            ? missionContextFromSnapshot(
+                snapshot,
+            )
             : undefined;
 
         if (!mission) {
@@ -55,50 +70,64 @@ export class MissionActionsFlow {
             return;
         }
 
-        const result = await this.context.prompts.run<MissionAction>({
-            id: "classhero-ai-automator.mission-actions",
-            kind: "select",
-            message: `Ações da missão — ${mission.title}`,
-            options: [
-                {
-                    id: "classhero-ai-automator.mission-actions.bonus",
-                    value: "bonus-game",
-                    label: "Jogo bônus",
-                    hint: "prioriza Memória/Caça-palavras para não gastar tokens",
-                },
-                {
-                    id: "classhero-ai-automator.mission-actions.reflection",
-                    value: "reflection",
-                    label: "Reflexão final",
-                    hint: "manual ou rascunho com IA + revisão obrigatória",
-                },
-                {
-                    id: "classhero-ai-automator.mission-actions.synthesis",
-                    value: "synthesis",
-                    label: "Síntese conceitual",
-                    hint: "manual ou rascunho com IA + revisão obrigatória",
-                },
-                {
-                    id: "classhero-ai-automator.mission-actions.back",
-                    value: "back",
-                    label: "Voltar",
-                },
-            ],
-        });
+        const result =
+            await this.context.prompts
+                .run<MissionAction>({
+                    id:
+                        "classhero-ai-automator.mission-actions",
+                    kind:
+                        "select",
+                    message:
+                        `Ações da missão — ${mission.title}`,
+                    options: [
+                        {
+                            id:
+                                "classhero-ai-automator.mission-actions.bonus",
+                            value:
+                                "bonus-game",
+                            label:
+                                "Jogo bônus",
+                            hint:
+                                "uma execução por missão · prioriza jogos nativos",
+                        },
+                        {
+                            id:
+                                "classhero-ai-automator.mission-actions.reflection",
+                            value:
+                                "reflection",
+                            label:
+                                "Reflexão final",
+                            hint:
+                                "manual ou rascunho com IA + revisão obrigatória",
+                        },
+                        {
+                            id:
+                                "classhero-ai-automator.mission-actions.back",
+                            value:
+                                "back",
+                            label:
+                                "Voltar",
+                        },
+                    ],
+                });
 
-        if (result.status !== "submitted") {
+        if (
+            result.status !==
+            "submitted"
+        ) {
             return;
         }
 
         switch (result.value) {
             case "bonus-game":
-                await this.bonusGames.run(mission);
+                await this.bonusGames.run(
+                    mission,
+                );
                 break;
             case "reflection":
-                await this.reflection.run(mission);
-                break;
-            case "synthesis":
-                await this.synthesis.run(mission);
+                await this.reflection.run(
+                    mission,
+                );
                 break;
             case "back":
                 break;
