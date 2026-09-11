@@ -35,6 +35,7 @@ export interface ThemesByCourseResponse extends UnknownRecord {
 
 /** Student mission closure/checkpoint state. */
 export interface ThemeClosure extends UnknownRecord {
+    closure_id?: string;
     theme_id: string;
     student_email: string;
     status: string;
@@ -75,4 +76,67 @@ export interface ThemeClosureSubmission extends UnknownRecord {
  * The fifth HAR confirms the endpoint but its response body was not preserved,
  * so the structure intentionally stays forward-compatible.
  */
-export interface ThemeClosureEvaluation extends UnknownRecord {}
+export interface ThemeClosureEvaluationRubricItem extends UnknownRecord {
+    score?: number;
+    feedback?: string;
+}
+
+export interface ThemeClosureEvaluationRubric extends UnknownRecord {
+    question_quality?: ThemeClosureEvaluationRubricItem;
+    honesty_of_doubts?: ThemeClosureEvaluationRubricItem;
+    practical_application?: ThemeClosureEvaluationRubricItem;
+    understanding_quality?: ThemeClosureEvaluationRubricItem;
+}
+
+export interface ThemeClosureEvaluationAiRubric extends UnknownRecord {
+    rubric?: ThemeClosureEvaluationRubric;
+    strengths?: string[];
+    improvements?: string[];
+    teacher_summary?: string;
+}
+
+export interface ThemeClosureEvaluationFlags extends UnknownRecord {
+    empty?: boolean;
+    off_topic?: boolean;
+    low_effort?: boolean;
+    prompt_injection?: boolean;
+}
+
+/** Student reflection evaluation observed in `/themes/:id/closure/evaluation`. */
+export interface ThemeClosureEvaluation extends UnknownRecord {
+    evaluation_id: string;
+    closure_id: string;
+    theme_id: string;
+    course_id: string;
+    ai_status: string;
+    ai_score: number | null;
+    ai_bonus_value: number | null;
+    ai_quality_level: string | null;
+    ai_feedback: unknown;
+    ai_rubric: ThemeClosureEvaluationAiRubric | null;
+    ai_flags: ThemeClosureEvaluationFlags | null;
+    teacher_status: string | null;
+    teacher_bonus_value: number | null;
+    teacher_comment: string | null;
+    reviewed_by: string | null;
+    reviewed_at: string | null;
+    bonus_entry_id: string | null;
+    submission_attempt: number;
+    supersedes_evaluation_id: string | null;
+    is_current: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface ThemeClosureEvaluationResponse extends UnknownRecord {
+    data: ThemeClosureEvaluation | null;
+}
+
+/** Fully filled reflection payload sent when the student submits manually or with AI assistance. */
+export interface SubmittedThemeClosureInput extends UnknownRecord {
+    status: "submitted";
+    understood_text: string;
+    doubts_text: string;
+    application_text: string;
+    question_text: string;
+}

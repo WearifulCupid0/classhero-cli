@@ -4,7 +4,7 @@ import type {
     GenericMessage,
     ThemeBonusDates,
     ThemeClosure,
-    ThemeClosureEvaluation,
+    ThemeClosureEvaluationResponse,
     ThemeClosureSubmission,
     ThemesByCourseResponse,
     UnknownRecord,
@@ -36,7 +36,7 @@ export class Themes extends Api {
 
     /** Loads the bonus/evaluation produced for a submitted mission closure. */
     closureEvaluation(themeId: string) {
-        return this.request<ThemeClosureEvaluation>(
+        return this.request<ThemeClosureEvaluationResponse>(
             `/themes/${encodeURIComponent(themeId)}/closure/evaluation`,
         );
     }

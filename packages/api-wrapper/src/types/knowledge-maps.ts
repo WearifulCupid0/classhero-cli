@@ -6,6 +6,10 @@ export interface KnowledgeMapNode extends UnknownRecord {
     id: string;
     label: string;
     parent_id: string | null;
+    /** Student final-synthesis contributions use `idea` and `doubt`. */
+    kind?: "idea" | "doubt" | (string & {});
+    /** True only for nodes authored by the student. */
+    student_added?: boolean;
 }
 
 export interface KnowledgeMapRelation extends UnknownRecord {
@@ -46,6 +50,9 @@ export interface KnowledgeMapStudentEvaluation extends UnknownRecord {
     status?: string;
     score?: number;
     feedback?: unknown;
+    teacher_status?: string | null;
+    teacher_bonus_value?: number | null;
+    teacher_comment?: string | null;
 }
 
 export interface StudentKnowledgeMap extends UnknownRecord {

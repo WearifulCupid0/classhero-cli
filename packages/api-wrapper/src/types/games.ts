@@ -1,10 +1,14 @@
 import type { UnknownRecord } from "./common.js";
 
-export type GameId = "memory" | "word-search" | "hangman" | "anagram" | (string & {});
+export type GameId = "memory" | "word-search" | "hangman" | "anagram" | "quiz" | (string & {});
 export type GameMode = "estudo" | "foco" | "desafio" | (string & {});
 
 export interface AvailableGamesQuery {
     [key: string]: string | number | boolean | null | undefined;
+    /**
+     * ClassHero uses the same query parameter for material-scoped discovery
+     * and, in the mission-bonus launcher, the mission/theme id itself.
+     */
     materialId?: string;
     mode?: GameMode;
 }
@@ -16,14 +20,38 @@ export interface AvailableGame extends UnknownRecord {
 }
 
 export interface AvailableGamesResponse extends UnknownRecord {
+    /** Games currently available for the supplied material/mission context. */
     games: AvailableGame[];
 }
 
-export interface MissionGameStartPayload extends UnknownRecord {
+/** Bonus games supported by the current mission launcher. */
+export type MissionBonusGameId =
+    | "memory"
+    | "word-search"
+    | "hangman";
+
+/** Starts a mini-game attached to one concrete theme material. */
+export interface MaterialGameStartPayload extends UnknownRecord {
     materialId: string;
     mode: GameMode;
     themeMissionMaterialId?: string;
 }
+
+/**
+ * Starts a mission-level bonus mini-game.
+ *
+ * The sixth HAR confirms this shape for word-search and the ClassHero frontend
+ * uses the same mission-scoped launcher for memory and hangman.
+ */
+export interface MissionGameStartPayload extends UnknownRecord {
+    missionId: string;
+    mode: GameMode;
+}
+
+/** Transport payload accepted by mini-game creation endpoints. */
+export type GameStartPayload =
+    | MaterialGameStartPayload
+    | MissionGameStartPayload;
 
 export interface PedagogicalCreditAward extends UnknownRecord {
     amount?: number;
@@ -73,8 +101,9 @@ export interface MemorySubmitInput extends UnknownRecord {
     mode: GameMode;
     time_seconds: number;
     theme_id: string;
-    material_id: string;
-    context: string;
+    /** Omitted by the frontend for mission-level bonus games. */
+    material_id?: string;
+    context: "material" | "mission" | (string & {});
     content_id: string;
 }
 
@@ -108,7 +137,8 @@ export interface WordSearchGameResponse extends UnknownRecord {
     key_words: WordSearchKeyword[];
     array: string[][];
     array_size: number;
-    content_id: string;
+    /** Mission-level word-search responses may omit this field. */
+    content_id?: string;
 }
 
 export interface WordSearchStartInput {
@@ -124,8 +154,12 @@ export interface WordSearchSubmitInput extends UnknownRecord {
     found_words: WordSearchFoundWord[];
     mode: GameMode;
     hints_used: number;
-    content_id: string;
-    material_id: string;
+    /** Omitted when the mission-scoped game response did not provide one. */
+    content_id?: string;
+    /** Material-scoped variant. */
+    material_id?: string;
+    /** Mission-scoped variant. */
+    mission_id?: string;
 }
 
 export interface WordSearchSubmitResponse extends UnknownRecord {
@@ -145,19 +179,23 @@ export interface WordSearchSubmitResponse extends UnknownRecord {
     pedagogical_credit_award: PedagogicalCreditAward | null;
 }
 
-export interface HangmanPuzzleRequest extends MissionGameStartPayload {
-    excludeWords?: string[];
-}
+export type HangmanPuzzleRequest =
+    | (MaterialGameStartPayload & {
+        excludeWords?: string[];
+    })
+    | (MissionGameStartPayload & {
+        excludeWords?: string[];
+    });
 
 export interface HangmanPuzzleSource extends UnknownRecord {
-    material_id: string;
+    material_id?: string;
 }
 
 export interface HangmanPuzzle extends UnknownRecord {
     id: string;
     puzzle_id: string;
     hint: string;
-    source: HangmanPuzzleSource;
+    source?: HangmanPuzzleSource;
     word_length: number;
     mask: string;
 }
@@ -165,8 +203,8 @@ export interface HangmanPuzzle extends UnknownRecord {
 export interface HangmanPuzzleResponse extends UnknownRecord {
     puzzles: HangmanPuzzle[];
     puzzle: HangmanPuzzle;
-    source_material_id: string;
-    content_id: string;
+    source_material_id?: string;
+    content_id?: string;
 }
 
 export interface HangmanGuessInput {
@@ -190,15 +228,15 @@ export interface HangmanSubmitInput extends UnknownRecord {
     puzzleId: string;
     won: boolean;
     attempts: number;
-    materialId: string;
+    materialId?: string;
     missionId: string;
-    context: string;
+    context: "material" | "mission" | (string & {});
     mode: GameMode;
     hintsUsed: number;
     time_seconds: number;
     bonusApplied: boolean;
     xpPreview: number;
-    content_id: string;
+    content_id?: string;
     clientGameStatus: string;
 }
 
@@ -221,7 +259,7 @@ export interface HangmanSubmitResponse extends UnknownRecord {
  * The fifth HAR confirms the same material/mode/source payload used by the
  * embedded game panel for the other material-linked mini-games.
  */
-export type AnagramPuzzleRequest = MissionGameStartPayload;
+export type AnagramPuzzleRequest = MaterialGameStartPayload;
 
 /**
  * Minimal successful puzzle shape read by the current ClassHero frontend.

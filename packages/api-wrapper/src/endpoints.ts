@@ -12,7 +12,7 @@ export interface ObservedEndpoint {
     readonly responseTopLevel: readonly string[];
 }
 
-/** Sanitized union of endpoint signatures observed across the five supplied HAR files. */
+/** Sanitized union of endpoint signatures observed across the six supplied HAR files. */
 export const observedEndpoints = [
     {
         method: "GET",
@@ -267,11 +267,20 @@ export const observedEndpoints = [
         responseTopLevel: ["match"],
     },
     {
+        method: "GET",
+        path: "/games/available",
+        statuses: [0, 200],
+        queryKeys: ["materialId", "mode"],
+        requestBodyKeys: [],
+        responseKind: ["object"],
+        responseTopLevel: ["games"],
+    },
+    {
         method: "POST",
         path: "/games/word-search",
         statuses: [200, 409],
         queryKeys: [],
-        requestBodyKeys: ["materialId", "mode", "themeMissionMaterialId"],
+        requestBodyKeys: ["materialId", "missionId", "mode", "themeMissionMaterialId"],
         responseKind: ["object"],
         responseTopLevel: ["array", "array_size", "content_id", "game_id", "key_words", "message", "path", "statusCode", "timestamp"],
     },
@@ -542,6 +551,15 @@ export const observedEndpoints = [
         statuses: [200],
         queryKeys: [],
         requestBodyKeys: [],
+        responseKind: ["object"],
+        responseTopLevel: ["data"],
+    },
+    {
+        method: "POST",
+        path: "/missions/:id/knowledge-maps/final/student",
+        statuses: [200],
+        queryKeys: [],
+        requestBodyKeys: ["nodes", "relations"],
         responseKind: ["object"],
         responseTopLevel: ["data"],
     },
@@ -894,7 +912,7 @@ export const observedEndpoints = [
         queryKeys: [],
         requestBodyKeys: [],
         responseKind: ["object"],
-        responseTopLevel: [],
+        responseTopLevel: ["data"],
     },
     {
         method: "GET",
@@ -908,11 +926,11 @@ export const observedEndpoints = [
     {
         method: "POST",
         path: "/themes/:id/closure",
-        statuses: [201],
+        statuses: [201, 409],
         queryKeys: [],
-        requestBodyKeys: ["status"],
+        requestBodyKeys: ["application_text", "doubts_text", "question_text", "status", "understood_text"],
         responseKind: ["object"],
-        responseTopLevel: [],
+        responseTopLevel: ["message", "path", "statusCode", "timestamp"],
     },
     {
         method: "GET",

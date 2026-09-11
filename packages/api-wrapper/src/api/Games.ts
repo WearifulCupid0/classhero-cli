@@ -11,6 +11,7 @@ import type {
     AvailableGamesResponse,
     GameCreditBalance,
     GameMode,
+    GameStartPayload,
     HangmanGuessResponse,
     HangmanPuzzleRequest,
     HangmanPuzzleResponse,
@@ -21,7 +22,7 @@ import type {
     MemorySubmitResponse,
     MemoryValidateInput,
     MemoryValidateResponse,
-    MissionGameStartPayload,
+    MaterialGameStartPayload,
     WordSearchGameResponse,
     WordSearchStartResponse,
     WordSearchSubmitInput,
@@ -30,7 +31,7 @@ import type {
 
 /** Memory-game endpoints. The game can be solved without an AI provider. */
 export class MemoryGames extends Api {
-    start(payload: MissionGameStartPayload) {
+    start(payload: GameStartPayload) {
         return this.request<MemoryGameResponse>("/games/memory", {
             method: "POST",
             body: JSON.stringify(payload),
@@ -59,14 +60,14 @@ export class MemoryGames extends Api {
 /** Word-search endpoints. The board is deterministic and does not require AI. */
 export class WordSearchGames extends Api {
     /** Creates or obtains a word-search board for the selected material. */
-    start(payload: MissionGameStartPayload) {
+    start(payload: GameStartPayload) {
         return this.request<WordSearchGameResponse>("/games/word-search", {
             method: "POST",
             body: JSON.stringify(payload),
         });
     }
 
-    regenerate(payload: MissionGameStartPayload) {
+    regenerate(payload: GameStartPayload) {
         return this.start(payload);
     }
 
