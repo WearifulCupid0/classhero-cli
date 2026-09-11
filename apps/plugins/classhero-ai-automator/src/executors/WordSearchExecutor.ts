@@ -2,14 +2,19 @@ import type {
     ClassHero,
     GameMode,
 } from "@classhero-cli/api-wrapper";
-import {
-    getSourceMissionMaterialId,
-    requireActivityTarget,
-} from "../context/ActivityTargets.js";
 import type {
     ActivityContext,
     AutomationExecutionResult,
 } from "../contracts/activity.js";
+import {
+    gameStartPayload,
+    materialGameScope,
+    missionGameScope,
+    type GameExecutionScope,
+} from "../contracts/game-scope.js";
+import type {
+    MissionAutomationContext,
+} from "../contracts/mission.js";
 import type {
     AutomationActivityLogger,
 } from "../logging/AutomationActivityLogger.js";
@@ -18,14 +23,7 @@ import type {
     ExecutionTimingPolicy,
 } from "../timing/ExecutionTimingPolicy.js";
 
-/**
- * Executes the deterministic ClassHero word-search workflow.
- *
- * The current observed API exposes `/start` and one final `/submit`, but no
- * per-word validation endpoint. Therefore solved words are paced through local
- * checkpoints and the complete `found_words` payload is sent at the final
- * checkpoint only.
- */
+/** Deterministic word-search executor for material and mission bonus scopes. */
 export class WordSearchExecutor {
     constructor(
         private readonly api: ClassHero,
@@ -34,35 +32,39 @@ export class WordSearchExecutor {
         private readonly solver = new WordSearchSolver(),
     ) {}
 
-    /** Creates, solves, progressively reveals and submits one word-search. */
-    async execute(
+    execute(
         context: ActivityContext,
         mode: GameMode,
     ): Promise<AutomationExecutionResult> {
+        return this.executeScope(
+            materialGameScope(context),
+            mode,
+        );
+    }
+
+    /** Executes a mission-indexed bonus round (ClassHero uses challenge mode). */
+    executeMission(
+        mission: MissionAutomationContext,
+        mode: GameMode = "desafio",
+    ): Promise<AutomationExecutionResult> {
+        return this.executeScope(
+            missionGameScope(mission),
+            mode,
+        );
+    }
+
+    private async executeScope(
+        scope: GameExecutionScope,
+        mode: GameMode,
+    ): Promise<AutomationExecutionResult> {
         try {
-            const target =
-                requireActivityTarget(
-                    context,
-                    "games",
-                );
-
-            const sourceMissionMaterialId =
-                getSourceMissionMaterialId(
-                    context,
-                );
-
             const started =
-                await this.api.games.wordSearch.start({
-                    materialId:
-                        target.materialId,
-                    mode,
-                    ...(sourceMissionMaterialId === undefined
-                        ? {}
-                        : {
-                            themeMissionMaterialId:
-                                sourceMissionMaterialId,
-                        }),
-                });
+                await this.api.games.wordSearch.start(
+                    gameStartPayload(
+                        scope,
+                        mode,
+                    ),
+                );
 
             if (!started.ok) {
                 return failed(
@@ -70,9 +72,7 @@ export class WordSearchExecutor {
                 );
             }
 
-            const game =
-                started.response;
-
+            const game = started.response;
             const markStarted =
                 await this.api.games.wordSearch.markStarted(
                     game.game_id,
@@ -84,26 +84,13 @@ export class WordSearchExecutor {
                 );
             }
 
-            const timingStartedAt =
-                Date.now();
+            const timingStartedAt = Date.now();
+            this.activityLogger.wordSearchStarted(game, mode);
 
-            this.activityLogger.wordSearchStarted(
-                game,
-                mode,
-            );
+            const solution = this.solver.solve(game);
 
-            const solution =
-                this.solver.solve(
-                    game,
-                );
-
-            for (
-                const unresolved of
-                    solution.unresolved
-            ) {
-                this.activityLogger.wordSearchUnresolved(
-                    unresolved,
-                );
+            for (const unresolved of solution.unresolved) {
+                this.activityLogger.wordSearchUnresolved(unresolved);
             }
 
             if (
@@ -113,83 +100,51 @@ export class WordSearchExecutor {
                 return failed(
                     "O solver não encontrou todas as palavras; a rodada não foi enviada para evitar pontuação incorreta.",
                     {
-                        unresolved:
-                            solution.unresolved.map(
-                                (item) =>
-                                    item.word,
-                            ),
+                        scope: scope.kind,
+                        unresolved: solution.unresolved.map((item) => item.word),
                     },
                 );
             }
 
             const schedule =
                 await this.timing.getGameProgressSchedule({
-                    targetId:
-                        "word-search",
+                    targetId: "word-search",
                     mode,
-                    totalUnits:
-                        solution.foundWords.length,
+                    totalUnits: solution.foundWords.length,
                 });
 
             this.activityLogger.miniGamePacingPlanned({
-                game:
-                    "Caça-palavras",
+                game: scope.kind === "mission"
+                    ? "Caça-palavras bônus da missão"
+                    : "Caça-palavras",
                 mode,
-                enabled:
-                    schedule.enabled,
-                totalSeconds:
-                    schedule.gameMinimumSeconds,
-                totalUnits:
-                    schedule.totalUnits,
-                intervalSeconds:
-                    schedule.intervalSeconds,
-                unitLabel:
-                    "palavra",
+                enabled: schedule.enabled,
+                totalSeconds: schedule.gameMinimumSeconds,
+                totalUnits: schedule.totalUnits,
+                intervalSeconds: schedule.intervalSeconds,
+                unitLabel: "palavra",
             });
 
             let totalWaitedSeconds = 0;
 
-            /*
-             * There is intentionally no partial /submit here. The captured
-             * ClassHero API only shows the final submit operation for the
-             * complete word-search result.
-             */
-            for (
-                let index = 0;
-                index <
-                    solution.foundWords.length;
-                index++
-            ) {
-                const foundWord =
-                    solution.foundWords[
-                        index
-                    ];
-
+            for (let index = 0; index < solution.foundWords.length; index++) {
+                const foundWord = solution.foundWords[index];
                 if (!foundWord) {
                     continue;
                 }
 
                 const checkpoint =
                     await this.timing.waitForGameProgress({
-                        targetId:
-                            "word-search",
+                        targetId: "word-search",
                         mode,
-                        startedAt:
-                            timingStartedAt,
-                        completedUnits:
-                            index + 1,
-                        totalUnits:
-                            solution.foundWords.length,
+                        startedAt: timingStartedAt,
+                        completedUnits: index + 1,
+                        totalUnits: solution.foundWords.length,
                     });
 
-                totalWaitedSeconds +=
-                    checkpoint.waitedSeconds;
+                totalWaitedSeconds += checkpoint.waitedSeconds;
 
-                const keyword =
-                    game.key_words[
-                        foundWord.wordIndex
-                    ];
-
+                const keyword = game.key_words[foundWord.wordIndex];
                 if (keyword) {
                     this.activityLogger.wordSearchFound(
                         keyword,
@@ -200,18 +155,16 @@ export class WordSearchExecutor {
 
             const submitted =
                 await this.api.games.wordSearch.submit({
-                    game_id:
-                        game.game_id,
-                    found_words: [
-                        ...solution.foundWords,
-                    ],
+                    game_id: game.game_id,
+                    found_words: [...solution.foundWords],
                     mode,
-                    hints_used:
-                        0,
-                    content_id:
-                        game.content_id,
-                    material_id:
-                        target.materialId,
+                    hints_used: 0,
+                    ...(game.content_id === undefined
+                        ? {}
+                        : { content_id: game.content_id }),
+                    ...(scope.kind === "mission"
+                        ? { mission_id: scope.missionId }
+                        : { material_id: scope.materialId }),
                 });
 
             if (!submitted.ok) {
@@ -221,56 +174,36 @@ export class WordSearchExecutor {
             }
 
             return {
-                status:
-                    "completed",
-                targetId:
-                    "word-search",
-                strategy:
-                    "native",
+                status: "completed",
+                targetId: "word-search",
+                strategy: "native",
                 message:
                     submitted.response.message ||
                     "Caça-palavras concluído.",
                 details: {
-                    wordsFound:
-                        submitted.response.found_correct,
-                    totalWords:
-                        submitted.response.total_words,
-                    score:
-                        submitted.response.score,
-                    xpAwarded:
-                        submitted.response.xp_awarded,
-                    alreadyRewarded:
-                        submitted.response.already_rewarded,
-                    timingEnabled:
-                        schedule.enabled,
-                    minimumSeconds:
-                        schedule.gameMinimumSeconds,
-                    checkpointIntervalSeconds:
-                        schedule.intervalSeconds,
-                    waitedSeconds:
-                        roundSeconds(
-                            totalWaitedSeconds,
-                        ),
-                    totalElapsedSeconds:
-                        submitted.response.time_seconds,
+                    scope: scope.kind,
+                    wordsFound: submitted.response.found_correct,
+                    totalWords: submitted.response.total_words,
+                    score: submitted.response.score,
+                    xpAwarded: submitted.response.xp_awarded,
+                    alreadyRewarded: submitted.response.already_rewarded,
+                    timingEnabled: schedule.enabled,
+                    minimumSeconds: schedule.gameMinimumSeconds,
+                    checkpointIntervalSeconds: schedule.intervalSeconds,
+                    waitedSeconds: roundSeconds(totalWaitedSeconds),
+                    totalElapsedSeconds: submitted.response.time_seconds,
                 },
             };
         } catch (error) {
             return failed(
-                error instanceof Error
-                    ? error.message
-                    : String(error),
+                error instanceof Error ? error.message : String(error),
             );
         }
     }
 }
 
-function roundSeconds(
-    seconds: number,
-): number {
-    return Math.round(
-        seconds * 100,
-    ) / 100;
+function roundSeconds(seconds: number): number {
+    return Math.round(seconds * 100) / 100;
 }
 
 function failed(
@@ -278,15 +211,10 @@ function failed(
     details?: Readonly<Record<string, unknown>>,
 ): AutomationExecutionResult {
     return {
-        status:
-            "failed",
-        targetId:
-            "word-search",
-        strategy:
-            "native",
+        status: "failed",
+        targetId: "word-search",
+        strategy: "native",
         message,
-        ...(details === undefined
-            ? {}
-            : { details }),
+        ...(details === undefined ? {} : { details }),
     };
 }

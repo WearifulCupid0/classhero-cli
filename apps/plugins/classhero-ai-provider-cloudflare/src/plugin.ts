@@ -27,7 +27,7 @@ export const plugin:
         name:
             "ClassHero AI Provider — Cloudflare",
         version:
-            "1.2.0",
+            "1.3.0",
         apiVersion:
             PLUGIN_API_VERSION,
         description:

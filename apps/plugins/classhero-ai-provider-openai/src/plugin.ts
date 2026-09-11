@@ -17,7 +17,7 @@ export const plugin: ClassHeroPlugin = {
     manifest: {
         id: "classhero-ai-provider-openai",
         name: "ClassHero AI Provider — OpenAI",
-        version: "1.0.0",
+        version: "1.1.0",
         apiVersion: PLUGIN_API_VERSION,
         description: "Provider OpenAI configurado somente com API key e modelo, ambos validados antes da persistência.",
         dependencies: [

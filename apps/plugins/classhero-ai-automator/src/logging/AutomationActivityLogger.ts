@@ -267,7 +267,9 @@ export class AutomationActivityLogger {
             ].join("\n"),
             {
                 puzzleId: puzzle.puzzle_id,
-                materialId: puzzle.source.material_id,
+                ...(puzzle.source?.material_id === undefined
+                    ? {}
+                    : { materialId: puzzle.source.material_id }),
                 mode,
             },
         );

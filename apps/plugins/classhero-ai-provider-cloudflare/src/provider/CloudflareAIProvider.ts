@@ -35,6 +35,8 @@ const CAPABILITIES: readonly AIProviderCapability[] = [
     "interactive-path",
     "code",
     "discursive",
+    "reflection",
+    "synthesis",
     "structured-output",
 ];
 
@@ -261,26 +263,23 @@ implements AIProvider {
                 {
                     task:
                         request.task,
-                    activity: {
-                        title:
-                            request.activity
-                                .title,
-                        materialType:
-                            request.activity
-                                .materialType,
-                        kind:
-                            request.activity
-                                .kind,
-                        capabilities:
-                            request.activity
-                                .capabilities,
-                        discipline:
-                            request.activity
-                                .disciplineName,
-                        mission:
-                            request.activity
-                                .missionName,
-                    },
+                    ...(request.activity === undefined
+                        ? {}
+                        : {
+                            activity: {
+                                title: request.activity.title,
+                                materialType: request.activity.materialType,
+                                kind: request.activity.kind,
+                                capabilities: request.activity.capabilities,
+                                discipline: request.activity.disciplineName,
+                                mission: request.activity.missionName,
+                            },
+                        }),
+                    ...(request.mission === undefined
+                        ? {}
+                        : {
+                            mission: { ...request.mission },
+                        }),
                     input:
                         request.input,
                 },

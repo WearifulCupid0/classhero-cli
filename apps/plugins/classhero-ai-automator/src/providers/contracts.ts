@@ -2,13 +2,17 @@ import type {
     ActivityContext,
     AutomationTargetId,
 } from "../contracts/activity.js";
+import type {
+    MissionAutomationContext,
+} from "../contracts/mission.js";
 
-/**
- * Semantic capabilities that an AI provider may advertise.
- *
- * Providers do not decide when a capability should be used. That decision
- * belongs to the automator planner.
- */
+/** Tasks that can be delegated to an AI provider. */
+export type AIProviderTaskId =
+    | AutomationTargetId
+    | "mission-reflection"
+    | "mission-synthesis";
+
+/** Semantic capabilities that an AI provider may advertise. */
 export type AIProviderCapability =
     | "quiz"
     | "hangman"
@@ -16,6 +20,8 @@ export type AIProviderCapability =
     | "interactive-path"
     | "code"
     | "discursive"
+    | "reflection"
+    | "synthesis"
     | "structured-output";
 
 /** Basic model metadata exposed by a provider plugin. */
@@ -25,14 +31,13 @@ export interface AIProviderModel {
     readonly capabilities?: readonly AIProviderCapability[];
 }
 
-/**
- * Provider-neutral request produced by an AI activity executor.
- *
- * The contract intentionally contains no OpenAI/Gemini-specific fields.
- */
+/** Provider-neutral request produced by an activity or mission assistant. */
 export interface AIProviderRequest {
-    readonly task: AutomationTargetId;
-    readonly activity: ActivityContext;
+    readonly task: AIProviderTaskId;
+    /** Activity-scoped context, omitted for mission-wide reflection/synthesis. */
+    readonly activity?: ActivityContext;
+    /** Mission-scoped context, used by reflection/synthesis and mission games. */
+    readonly mission?: MissionAutomationContext;
     readonly systemInstruction: string;
     readonly input: Readonly<Record<string, unknown>>;
     readonly output?: AIProviderOutputRequirement;
@@ -62,30 +67,14 @@ export interface AIProviderResult {
     readonly metadata?: Readonly<Record<string, unknown>>;
 }
 
-/**
- * Dependency-inversion boundary implemented by OpenAI, Gemini or any other
- * model-provider plugin.
- *
- * The automator depends only on this interface and never imports an AI SDK.
- */
+/** Dependency-inversion boundary implemented by model-provider plugins. */
 export interface AIProvider {
-    /** Stable provider id, for example `openai` or `gemini`. */
     readonly id: string;
-    /** Human-readable provider name. */
     readonly name: string;
-    /** Capabilities supported by this provider. */
     readonly capabilities: readonly AIProviderCapability[];
-    /** Models made available by the provider, when discoverable. */
     readonly models?: readonly AIProviderModel[];
 
-    /**
-     * Optional health/configuration check.
-     *
-     * A provider should return `false` when credentials/configuration are
-     * missing instead of throwing for a normal unconfigured state.
-     */
     isAvailable?(): boolean | Promise<boolean>;
 
-    /** Executes one provider-neutral generation request. */
     generate(request: AIProviderRequest): Promise<AIProviderResult>;
 }

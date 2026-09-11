@@ -9,6 +9,10 @@ import type {
     AutomationPlan,
     AutomationTargetId,
 } from "../contracts/activity.js";
+import type {
+    MissionAutomationContext,
+    MissionBonusGameTargetId,
+} from "../contracts/mission.js";
 import { HangmanExecutor } from "../executors/HangmanExecutor.js";
 import { InteractivePathExecutor } from "../executors/InteractivePathExecutor.js";
 import { MemoryExecutor } from "../executors/MemoryExecutor.js";
@@ -161,6 +165,22 @@ export class AutomationEngine {
 
     logging(): AutomationActivityLogger {
         return this.activityLogger;
+    }
+
+    /**
+     * Resolves a configured AI provider for mission-wide assistant flows.
+     *
+     * This performs no ClassHero side effect and uses the same fail-closed
+     * availability check as normal automation preflight.
+     */
+    async availableAIProvider(
+        capability: AIProviderCapability,
+        preferredProviderId?: string,
+    ): Promise<AIProvider | undefined> {
+        return this.resolveProvider(
+            capability,
+            preferredProviderId,
+        );
     }
 
     /**
@@ -334,6 +354,54 @@ export class AutomationEngine {
                             provider.name,
                     },
                 };
+            }
+        }
+    }
+
+    /**
+     * Executes a mission-level bonus game in ClassHero's fixed Challenge mode.
+     *
+     * Native games never resolve an AI provider. Hangman resolves and verifies
+     * its provider before the puzzle endpoint is called, so a missing AI
+     * configuration can never create a partially-started bonus game.
+     */
+    async executeMissionBonus(
+        mission: MissionAutomationContext,
+        targetId: MissionBonusGameTargetId,
+        preferredProviderId?: string,
+    ): Promise<AutomationExecutionResult> {
+        switch (targetId) {
+            case "memory":
+                return this.memory.executeMission(
+                    mission,
+                    "desafio",
+                );
+
+            case "word-search":
+                return this.wordSearch.executeMission(
+                    mission,
+                    "desafio",
+                );
+
+            case "hangman": {
+                const provider = await this.resolveProvider(
+                    "hangman",
+                    preferredProviderId,
+                );
+
+                if (!provider) {
+                    return providerBlocked(
+                        "hangman",
+                        "hangman",
+                        "A Forca bônus exige IA, mas nenhum provider compatível está disponível. Nenhum puzzle foi iniciado.",
+                    );
+                }
+
+                return this.hangman.executeMission(
+                    mission,
+                    provider,
+                    "desafio",
+                );
             }
         }
     }

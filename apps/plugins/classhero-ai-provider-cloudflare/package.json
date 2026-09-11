@@ -1,6 +1,6 @@
 {
   "name": "@classhero-cli/classhero-ai-provider-cloudflare",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "private": true,
   "description": "Cloudflare AI Gateway AIProvider plugin for the ClassHero CLI automator.",
   "type": "module",

@@ -5,6 +5,7 @@ import {
 } from "@classhero-cli/plugin-api";
 import { AutomationEngine } from "./engine/AutomationEngine.js";
 import { AutomationActivityLogger } from "./logging/AutomationActivityLogger.js";
+import { MissionActionsFlow } from "./mission/MissionActionsFlow.js";
 import { AI_PROVIDER } from "./providers/tokens.js";
 import { AUTOMATION_ENGINE } from "./services/tokens.js";
 import { ExecutionTimingPolicy } from "./timing/ExecutionTimingPolicy.js";
@@ -22,7 +23,7 @@ export const plugin: ClassHeroPlugin = {
     manifest: {
         id: "classhero-ai-automator",
         name: "ClassHero AI Automator",
-        version: "1.1.0",
+        version: "1.8.0",
         apiVersion: PLUGIN_API_VERSION,
         description: "Automação híbrida com solvers nativos, providers de IA e política configurável de tempo mínimo.",
     },
@@ -73,6 +74,11 @@ export const plugin: ClassHeroPlugin = {
             timingStore,
         );
 
+        const missionActionsFlow = new MissionActionsFlow(
+            context,
+            engine,
+        );
+
         context.services.provide(
             AUTOMATION_ENGINE,
             engine,
@@ -101,6 +107,23 @@ export const plugin: ClassHeroPlugin = {
                             hint: "algoritmo nativo ou IA conforme o tipo",
                             onSelect: async () =>
                                 automatorFlow.run(),
+                        },
+                    );
+                }
+
+                if (
+                    snapshot?.authenticated &&
+                    snapshot.mission
+                ) {
+                    menu.addBefore(
+                        "main.plugins",
+                        {
+                            id: "classhero-ai-automator.mission-actions.open",
+                            value: "classhero-ai-automator.mission-actions.open",
+                            label: "Ações da missão",
+                            hint: "jogo bônus, reflexão final e síntese conceitual",
+                            onSelect: async () =>
+                                missionActionsFlow.run(),
                         },
                     );
                 }
