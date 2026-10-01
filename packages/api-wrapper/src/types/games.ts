@@ -105,6 +105,8 @@ export interface MemorySubmitInput extends UnknownRecord {
     material_id?: string;
     context: "material" | "mission" | (string & {});
     content_id: string;
+    /** Material-source Journey node used by the current frontend submit flow. */
+    theme_mission_material_id?: string;
 }
 
 export interface MemorySubmitResponse extends UnknownRecord {
@@ -262,17 +264,15 @@ export interface HangmanSubmitResponse extends UnknownRecord {
 export type AnagramPuzzleRequest = MaterialGameStartPayload;
 
 /**
- * Minimal successful puzzle shape read by the current ClassHero frontend.
- *
- * A successful response has not yet been captured because the backend reports
- * that no prepared Anagram content exists. These fields are nevertheless
- * confirmed by the shipped frontend component itself.
+ * Successful Anagram puzzle shape observed in the current ClassHero frontend
+ * and confirmed by a completed material-scoped HAR round.
  */
 export interface AnagramPuzzleResponse extends UnknownRecord {
     puzzle_id: string;
     /** Each nested array is one scrambled word/group displayed to the user. */
     scrambled_groups: string[][];
     hint: string;
+    source_material_id?: string;
     content_id: string;
 }
 
@@ -288,16 +288,19 @@ export interface AnagramRevealLetterInput {
 
 /** Position revealed by the ClassHero Anagram helper endpoint. */
 export interface AnagramRevealLetterResponse extends UnknownRecord {
+    puzzle_id: string;
     word_index: number;
     position: number;
     letter: string;
     revealed_count: number;
-    emergency?: boolean;
-    penalty_points?: number;
+    total: number;
+    cost: number;
+    emergency: boolean;
+    penalty_points: number;
     balance?: {
         available_credits: number;
         [key: string]: unknown;
-    };
+    } | null;
 }
 
 /**
@@ -318,6 +321,8 @@ export interface AnagramSubmitInput extends UnknownRecord {
     bonusApplied: boolean;
     xpPreview: number;
     content_id: string;
+    /** Camel-case source id used by `/games/anagram/submit`. */
+    themeMissionMaterialId?: string;
     clientGameStatus: string;
 }
 
@@ -328,12 +333,15 @@ export interface AnagramSubmitInput extends UnknownRecord {
  * submissions are handled by the same endpoint.
  */
 export interface AnagramSubmitResponse extends UnknownRecord {
-    attempt_id?: string;
+    success: boolean;
     won: boolean;
+    correct?: boolean;
     wrong_submit_count?: number;
     message?: string;
     revealed_term?: string;
+    content_id?: string;
     allow_retry?: boolean;
+    attempt_id?: string;
     xp_awarded?: number;
     score?: number;
     pedagogical_credit_award?: PedagogicalCreditAward | null;

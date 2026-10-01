@@ -132,12 +132,9 @@ export class HangmanGames extends Api {
 
 
 /**
- * Anagram endpoints already shipped by the ClassHero frontend.
- *
- * Only `/puzzle` has been exercised in a HAR so far, where it currently
- * returns HTTP 400 because no prepared content exists. The companion methods
- * are mapped from the frontend bundle and intentionally remain transport-only
- * until a successful game can be captured.
+ * Anagram endpoints confirmed by a successful material-scoped ClassHero round.
+ * Puzzle creation, position reveal and final/retry submissions are now all
+ * represented by observed transport contracts.
  */
 export class AnagramGames extends Api {
     puzzle(payload: AnagramPuzzleRequest) {

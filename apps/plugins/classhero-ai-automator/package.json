@@ -1,6 +1,6 @@
 {
   "name": "@classhero-cli/classhero-ai-automator",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "private": true,
   "description": "Provider-agnostic ClassHero activity automation engine with deterministic native solvers.",
   "type": "module",
