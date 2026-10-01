@@ -34,9 +34,9 @@ const HANGMAN: AutomationTarget = {
 const ANAGRAM: AutomationTarget = {
     id: "anagram",
     label: "Anagrama",
-    description: "Reorganiza grupos de letras com apoio de IA; API já mapeada, executor aguardando captura de uma rodada válida.",
+    description: "Reorganiza os grupos de letras com IA, valida a candidata localmente e usa o ClassHero como fonte de verdade.",
     strategy: "ai",
-    executable: false,
+    executable: true,
 };
 
 const QUIZ: AutomationTarget = {
@@ -210,7 +210,7 @@ function reasonFor(
 ): string {
     switch (capability) {
         case "games":
-            return "A atividade possui mini-games: caça-palavras e memória são determinísticos; forca usa IA com validação do backend; Anagrama já é reconhecido, mas aguarda uma captura de execução válida.";
+            return "A atividade possui mini-games: caça-palavras e memória são determinísticos; forca e Anagrama usam IA com validação do backend.";
         case "quiz":
             return "A atividade possui quiz com diferentes formatos de pergunta e validação por questão.";
         case "interactive-path":

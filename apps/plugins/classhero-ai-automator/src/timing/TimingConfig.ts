@@ -56,10 +56,7 @@ export const DEFAULT_TIMING_CONFIG: AutomatorTimingConfig = {
             foco: 45,
             desafio: 60,
         },
-        /**
-         * Provisional defaults only. The Anagram executor is intentionally
-         * disabled until a successful game capture is available.
-         */
+        /** Minimum Anagram durations; the executor now uses these values. */
         anagram: {
             estudo: 30,
             foco: 45,

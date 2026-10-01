@@ -9,6 +9,7 @@ import type {
     AutomationPlan,
     AutomationTargetId,
 } from "../contracts/activity.js";
+import { AnagramExecutor } from "../executors/AnagramExecutor.js";
 import type {
     MissionAutomationContext,
     MissionBonusGameTargetId,
@@ -116,6 +117,7 @@ export class AutomationEngine {
     private readonly wordSearch: WordSearchExecutor;
     private readonly memory: MemoryExecutor;
     private readonly hangman: HangmanExecutor;
+    private readonly anagram: AnagramExecutor;
     private readonly quiz: QuizExecutor;
     private readonly interactivePath: InteractivePathExecutor;
     private readonly gameEligibility: GameEligibilityPolicy;
@@ -144,6 +146,10 @@ export class AutomationEngine {
             api,
             timingPolicy,
             activityLogger,
+        );
+        this.anagram = new AnagramExecutor(
+            api,
+            timingPolicy,
         );
         this.quiz = new QuizExecutor(
             api,
@@ -344,6 +350,21 @@ export class AutomationEngine {
                 );
             }
 
+            case "anagram": {
+                const provider =
+                    requireResolvedProvider(
+                        preflight,
+                        targetId,
+                    );
+
+                return this.anagram.execute(
+                    context,
+                    options.mode ??
+                        "desafio",
+                    provider,
+                );
+            }
+
             case "quiz": {
                 const provider =
                     requireResolvedProvider(
@@ -398,7 +419,6 @@ export class AutomationEngine {
                 );
             }
 
-            case "anagram":
             case "code":
             case "discursive": {
                 const provider =

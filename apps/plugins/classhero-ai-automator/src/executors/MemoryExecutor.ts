@@ -204,6 +204,13 @@ export class MemoryExecutor {
                         : { material_id: scope.materialId }),
                     context: scope.kind,
                     content_id: game.content_id,
+                    ...(scope.kind === "material" &&
+                    scope.themeMissionMaterialId !== undefined
+                        ? {
+                            theme_mission_material_id:
+                                scope.themeMissionMaterialId,
+                        }
+                        : {}),
                 });
 
             if (!submitted.ok) {

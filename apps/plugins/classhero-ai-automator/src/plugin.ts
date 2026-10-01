@@ -29,7 +29,7 @@ export const plugin: ClassHeroPlugin = {
     manifest: {
         id: "classhero-ai-automator",
         name: "ClassHero AI Automator",
-        version: "1.9.0",
+        version: "1.10.0",
         apiVersion: PLUGIN_API_VERSION,
         description: "Automação híbrida com solvers nativos, providers de IA e política configurável de tempo mínimo.",
     },

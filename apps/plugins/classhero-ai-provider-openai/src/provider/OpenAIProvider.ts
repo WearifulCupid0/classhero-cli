@@ -18,6 +18,7 @@ import type {
 const CAPABILITIES: readonly AIProviderCapability[] = [
     "quiz",
     "hangman",
+    "anagram",
     "interactive-path",
     "code",
     "discursive",
